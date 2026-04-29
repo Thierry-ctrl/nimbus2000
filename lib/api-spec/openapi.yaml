@@ -1,0 +1,1465 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: KigaliWeShare API — neighbor-to-neighbor carpool matching for Kigali commuters
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+  - name: invites
+  - name: profile
+  - name: catalog
+  - name: trips
+  - name: requests
+  - name: ratings
+  - name: dashboard
+  - name: admin
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthStatus" }
+
+  /invites/redeem:
+    post:
+      operationId: redeemInvite
+      tags: [invites]
+      summary: Redeem an invite code (called during onboarding)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RedeemInviteBody" }
+      responses:
+        "200":
+          description: Code accepted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InviteRedemption" }
+        "400": { description: Invalid or already used code }
+
+  /catalog/neighborhoods:
+    get:
+      operationId: listNeighborhoods
+      tags: [catalog]
+      summary: All seeded Kigali neighborhoods
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Neighborhood" }
+
+  /catalog/corridors:
+    get:
+      operationId: listCorridors
+      tags: [catalog]
+      summary: Pilot commute corridors
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Corridor" }
+
+  /catalog/config:
+    get:
+      operationId: getPublicConfig
+      tags: [catalog]
+      summary: Public config (current fuel price, brand values)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicConfig" }
+
+  /profile/me:
+    get:
+      operationId: getMyProfile
+      tags: [profile]
+      summary: Get the current user's profile
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Profile" }
+        "404": { description: No profile yet (needs onboarding) }
+    put:
+      operationId: upsertMyProfile
+      tags: [profile]
+      summary: Create or update the current user's profile (onboarding)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpsertProfileBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Profile" }
+
+  /profile/me/vehicle:
+    put:
+      operationId: upsertMyVehicle
+      tags: [profile]
+      summary: Create or update the driver's vehicle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpsertVehicleBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vehicle" }
+
+  /profile/{userId}:
+    get:
+      operationId: getUserProfile
+      tags: [profile]
+      summary: Public-ish profile for another user (rating, completed trips, vehicle)
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicProfile" }
+        "404": { description: Not found }
+
+  /trips:
+    get:
+      operationId: listMyTrips
+      tags: [trips]
+      summary: List the current driver's trips
+      parameters:
+        - in: query
+          name: scope
+          schema:
+            type: string
+            enum: [upcoming, past, all]
+            default: upcoming
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Trip" }
+    post:
+      operationId: createTrip
+      tags: [trips]
+      summary: Post a one-off driver trip
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateTripBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Trip" }
+
+  /trips/quick-post-defaults:
+    get:
+      operationId: getQuickPostDefaults
+      tags: [trips]
+      summary: Origin/destination from driver's most-used corridor
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuickPostDefaults" }
+
+  /trips/{tripId}:
+    get:
+      operationId: getTrip
+      tags: [trips]
+      parameters:
+        - in: path
+          name: tripId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TripDetail" }
+
+  /trips/{tripId}/cancel:
+    post:
+      operationId: cancelTrip
+      tags: [trips]
+      parameters:
+        - in: path
+          name: tripId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CancelTripBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Trip" }
+
+  /trips/{tripId}/start:
+    post:
+      operationId: startTrip
+      tags: [trips]
+      parameters:
+        - in: path
+          name: tripId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Trip" }
+
+  /trips/{tripId}/complete:
+    post:
+      operationId: completeTrip
+      tags: [trips]
+      parameters:
+        - in: path
+          name: tripId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Trip" }
+
+  /recurring-trips:
+    get:
+      operationId: listMyRecurringTrips
+      tags: [trips]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RecurringTrip" }
+    post:
+      operationId: createRecurringTrip
+      tags: [trips]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateRecurringTripBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecurringTrip" }
+
+  /recurring-trips/{recurringId}:
+    delete:
+      operationId: deleteRecurringTrip
+      tags: [trips]
+      parameters:
+        - in: path
+          name: recurringId
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Deleted }
+
+  /matches:
+    get:
+      operationId: findMatches
+      tags: [trips]
+      summary: Match driver trips to a rider's intent (corridor + window)
+      parameters:
+        - in: query
+          name: originId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: destinationId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: date
+          required: true
+          schema: { type: string, format: date }
+        - in: query
+          name: windowStart
+          required: true
+          schema: { type: string, description: "HH:MM" }
+        - in: query
+          name: windowEnd
+          required: true
+          schema: { type: string, description: "HH:MM" }
+        - in: query
+          name: sameGenderOnly
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MatchesResponse" }
+
+  /requests:
+    get:
+      operationId: listMyRideRequests
+      tags: [requests]
+      summary: Rides the current rider has requested
+      parameters:
+        - in: query
+          name: scope
+          schema:
+            type: string
+            enum: [upcoming, past, all]
+            default: upcoming
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RideRequest" }
+    post:
+      operationId: createRideRequest
+      tags: [requests]
+      summary: Rider requests a seat on a specific trip
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateRideRequestBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RideRequest" }
+
+  /requests/{requestId}/approve:
+    post:
+      operationId: approveRideRequest
+      tags: [requests]
+      parameters:
+        - in: path
+          name: requestId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RideRequest" }
+
+  /requests/{requestId}/decline:
+    post:
+      operationId: declineRideRequest
+      tags: [requests]
+      parameters:
+        - in: path
+          name: requestId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RideRequest" }
+
+  /requests/{requestId}/cancel:
+    post:
+      operationId: cancelRideRequest
+      tags: [requests]
+      parameters:
+        - in: path
+          name: requestId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RideRequest" }
+
+  /ratings:
+    post:
+      operationId: createRating
+      tags: [ratings]
+      summary: Rate the other party after a completed trip
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateRatingBody" }
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Rating" }
+
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Personalized dashboard for the current user (driver+rider stats, fuel saved, next trip, pending requests)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DashboardSummary" }
+
+  /dashboard/activity:
+    get:
+      operationId: getRecentActivity
+      tags: [dashboard]
+      summary: Recent activity feed for the current user
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ActivityItem" }
+
+  /dashboard/rating-prompts:
+    get:
+      operationId: listRatingPrompts
+      tags: [dashboard]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RatingPrompt" }
+
+  /dashboard/rating-prompts/{tripId}/dismiss:
+    post:
+      operationId: dismissRatingPrompt
+      tags: [dashboard]
+      parameters:
+        - in: path
+          name: tripId
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Dismissed }
+
+  /notifications/subscribe:
+    post:
+      operationId: subscribePush
+      tags: [notifications]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PushSubscribeBody" }
+      responses:
+        "201":
+          description: Subscribed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+    delete:
+      operationId: unsubscribePush
+      tags: [notifications]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PushUnsubscribeBody" }
+      responses:
+        "204": { description: Unsubscribed }
+
+  /reports:
+    post:
+      operationId: createReport
+      tags: [reports]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateReportBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Report" }
+
+  /admin/reports:
+    get:
+      operationId: listAdminReports
+      tags: [admin]
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [open, reviewing, resolved, dismissed, all]
+            default: open
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdminReport" }
+
+  /admin/reports/{id}:
+    put:
+      operationId: updateAdminReport
+      tags: [admin]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateReportBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminReport" }
+
+  /admin/invite-analytics:
+    get:
+      operationId: getInviteAnalytics
+      tags: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/InviteAnalytics" }
+
+  /admin/export/users.csv:
+    get:
+      operationId: exportUsersCsv
+      tags: [admin]
+      responses:
+        "200":
+          description: CSV
+          content:
+            text/csv:
+              schema: { type: string }
+
+  /admin/export/trips.csv:
+    get:
+      operationId: exportTripsCsv
+      tags: [admin]
+      responses:
+        "200":
+          description: CSV
+          content:
+            text/csv:
+              schema: { type: string }
+
+  /admin/users/{userId}/id-verified:
+    post:
+      operationId: setUserIdVerified
+      tags: [admin]
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetIdVerifiedBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [userId, idVerified]
+                properties:
+                  userId: { type: string }
+                  idVerified: { type: boolean }
+
+  /admin/stats:
+    get:
+      operationId: getAdminStats
+      tags: [admin]
+      summary: Pilot operator stats — WAU, matches/day, rides completed, no-show rate
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminStats" }
+
+  /admin/users:
+    get:
+      operationId: listAdminUsers
+      tags: [admin]
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, verified, all]
+            default: all
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdminUserRow" }
+
+  /admin/users/{userId}/verify:
+    post:
+      operationId: verifyUser
+      tags: [admin]
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VerifyUserBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminUserRow" }
+
+  /admin/invites:
+    get:
+      operationId: listInvites
+      tags: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/InviteCode" }
+    post:
+      operationId: createInvite
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateInviteBody" }
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/InviteCode" }
+
+  /admin/neighborhoods:
+    post:
+      operationId: createAdminNeighborhood
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateNeighborhoodBody" }
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Neighborhood" }
+
+  /admin/neighborhoods/{id}:
+    put:
+      operationId: updateAdminNeighborhood
+      tags: [admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateNeighborhoodBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Neighborhood" }
+    delete:
+      operationId: deleteAdminNeighborhood
+      tags: [admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Deleted }
+
+  /admin/corridors:
+    post:
+      operationId: createAdminCorridor
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCorridorBody" }
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Corridor" }
+
+  /admin/corridors/{id}:
+    put:
+      operationId: updateAdminCorridor
+      tags: [admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateCorridorBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Corridor" }
+    delete:
+      operationId: deleteAdminCorridor
+      tags: [admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Deleted }
+
+  /admin/config:
+    put:
+      operationId: updateConfig
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateConfigBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicConfig" }
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string }
+
+    Gender:
+      type: string
+      enum: [female, male, other, prefer_not_to_say]
+
+    Role:
+      type: string
+      enum: [rider, driver, both]
+
+    AccountStatus:
+      type: string
+      enum: [pending, verified, suspended]
+
+    TripStatus:
+      type: string
+      enum: [scheduled, in_progress, completed, cancelled]
+
+    RideRequestStatus:
+      type: string
+      enum: [pending, approved, declined, cancelled, completed]
+
+    Neighborhood:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        sector: { type: string, nullable: true }
+
+    Corridor:
+      type: object
+      required: [id, label, originId, destinationId, distanceKm]
+      properties:
+        id: { type: string }
+        label: { type: string, description: "e.g. Remera \u2013 CBD" }
+        originId: { type: string }
+        destinationId: { type: string }
+        distanceKm: { type: number }
+
+    PublicConfig:
+      type: object
+      required: [fuelPriceRwfPerLitre, dieselPriceRwfPerLitre, vehicleConsumptionLPer100Km, currencyCode]
+      properties:
+        fuelPriceRwfPerLitre: { type: number }
+        dieselPriceRwfPerLitre: { type: number }
+        vehicleConsumptionLPer100Km: { type: number }
+        currencyCode: { type: string, description: "e.g. RWF" }
+        rnpEmergencyNumber: { type: string }
+        vapidPublicKey: { type: string }
+
+    FuelType:
+      type: string
+      enum: [petrol, diesel]
+
+    Language:
+      type: string
+      enum: [en, fr, rw]
+
+    ReportStatus:
+      type: string
+      enum: [open, reviewing, resolved, dismissed]
+
+    InviteRedemption:
+      type: object
+      required: [inviteCodeId, label]
+      properties:
+        inviteCodeId: { type: string }
+        label: { type: string, description: "e.g. Norrsken Pilot" }
+
+    RedeemInviteBody:
+      type: object
+      required: [code]
+      properties:
+        code: { type: string }
+
+    Vehicle:
+      type: object
+      required: [id, make, model, color, plate, seats, fuelType]
+      properties:
+        id: { type: string }
+        make: { type: string }
+        model: { type: string }
+        color: { type: string }
+        plate: { type: string }
+        seats: { type: integer, minimum: 1, maximum: 4 }
+        photoUrl: { type: string, nullable: true }
+        nationalId: { type: string, nullable: true }
+        fuelType: { $ref: "#/components/schemas/FuelType" }
+        consumptionLPer100Km: { type: number, nullable: true }
+
+    UpsertVehicleBody:
+      type: object
+      required: [make, model, color, plate, seats]
+      properties:
+        make: { type: string }
+        model: { type: string }
+        color: { type: string }
+        plate: { type: string }
+        seats: { type: integer, minimum: 1, maximum: 4 }
+        photoUrl: { type: string, nullable: true }
+        nationalId: { type: string, nullable: true }
+        fuelType: { $ref: "#/components/schemas/FuelType" }
+        consumptionLPer100Km: { type: number, nullable: true }
+
+    Profile:
+      type: object
+      required: [userId, fullName, gender, role, neighborhoodId, status, createdAt]
+      properties:
+        userId: { type: string }
+        fullName: { type: string }
+        gender: { $ref: "#/components/schemas/Gender" }
+        role: { $ref: "#/components/schemas/Role" }
+        neighborhoodId: { type: string }
+        homePickupPoint: { type: string, nullable: true }
+        employer: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        emergencyContactName: { type: string, nullable: true }
+        emergencyContactPhone: { type: string, nullable: true }
+        status: { $ref: "#/components/schemas/AccountStatus" }
+        avatarUrl: { type: string, nullable: true }
+        averageRating: { type: number, nullable: true }
+        completedTrips: { type: integer }
+        vehicle:
+          oneOf:
+            - { $ref: "#/components/schemas/Vehicle" }
+            - { type: "null" }
+        inviteLabel: { type: string, nullable: true }
+        isAdmin: { type: boolean }
+        idVerified: { type: boolean }
+        preferredLanguage: { $ref: "#/components/schemas/Language" }
+        blockedAt: { type: string, format: date-time, nullable: true }
+        blockedReason: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    PublicProfile:
+      type: object
+      required: [userId, fullName, role, completedTrips]
+      properties:
+        userId: { type: string }
+        fullName: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        avatarUrl: { type: string, nullable: true }
+        averageRating: { type: number, nullable: true }
+        completedTrips: { type: integer }
+        neighborhoodName: { type: string, nullable: true }
+        gender: { $ref: "#/components/schemas/Gender" }
+        vehicle:
+          oneOf:
+            - { $ref: "#/components/schemas/Vehicle" }
+            - { type: "null" }
+        idVerified: { type: boolean }
+
+    UpsertProfileBody:
+      type: object
+      required: [fullName, gender, role, neighborhoodId, phone]
+      properties:
+        fullName: { type: string }
+        gender: { $ref: "#/components/schemas/Gender" }
+        role: { $ref: "#/components/schemas/Role" }
+        neighborhoodId: { type: string }
+        homePickupPoint: { type: string, nullable: true }
+        employer: { type: string, nullable: true }
+        phone: { type: string }
+        emergencyContactName: { type: string, nullable: true }
+        emergencyContactPhone: { type: string, nullable: true }
+        preferredLanguage: { $ref: "#/components/schemas/Language" }
+
+    Trip:
+      type: object
+      required:
+        [id, driverId, originId, destinationId, departureDate, departureTime, flexMinutes, seatsTotal, seatsRemaining, status]
+      properties:
+        id: { type: string }
+        driverId: { type: string }
+        driverName: { type: string }
+        driverRating: { type: number, nullable: true }
+        originId: { type: string }
+        originName: { type: string }
+        destinationId: { type: string }
+        destinationName: { type: string }
+        departureDate: { type: string, format: date }
+        departureTime: { type: string, description: "HH:MM (window start)" }
+        windowEndTime: { type: string, nullable: true, description: "HH:MM (window end)" }
+        pickupPoint: { type: string, nullable: true }
+        flexMinutes: { type: integer, enum: [5, 10, 15] }
+        seatsTotal: { type: integer }
+        seatsRemaining: { type: integer }
+        sameGenderOnly: { type: boolean }
+        notes: { type: string, nullable: true }
+        status: { $ref: "#/components/schemas/TripStatus" }
+        cancelReason: { type: string, nullable: true }
+        fuelShare:
+          oneOf:
+            - { $ref: "#/components/schemas/FuelShare" }
+            - { type: "null" }
+
+    FuelShare:
+      type: object
+      required:
+        [distanceKm, pricePerLitreRwf, consumptionLPer100Km, fuelCostRwf, perPassengerRwf, driverPaysRwf, totalRiderShareRwf]
+      description: |
+        Suggested fuel cost-share for the trip. KigaliWeShare does not process payments;
+        riders pay drivers directly (MoMo / cash). Per-rider amount can never exceed an
+        equal split, ensuring this stays a non-commercial cost-share.
+      properties:
+        distanceKm: { type: number }
+        pricePerLitreRwf: { type: number }
+        consumptionLPer100Km: { type: number }
+        fuelCostRwf: { type: number, description: "Total fuel cost for the whole trip" }
+        perPassengerRwf: { type: number, description: "Suggested contribution per rider, rounded to 100 RWF" }
+        driverPaysRwf: { type: number, description: "Driver's own out-of-pocket after rider contributions" }
+        totalRiderShareRwf: { type: number }
+
+    TripDetail:
+      allOf:
+        - $ref: "#/components/schemas/Trip"
+        - type: object
+          properties:
+            vehicle:
+              oneOf:
+                - { $ref: "#/components/schemas/Vehicle" }
+                - { type: "null" }
+            driverPhone: { type: string, nullable: true, description: "Revealed only to approved riders" }
+            requests:
+              type: array
+              items: { $ref: "#/components/schemas/RideRequest" }
+
+    CreateTripBody:
+      type: object
+      required: [originId, destinationId, departureDate, departureTime, flexMinutes, seats]
+      properties:
+        originId: { type: string }
+        destinationId: { type: string }
+        departureDate: { type: string, format: date }
+        departureTime: { type: string }
+        windowEndTime: { type: string, nullable: true }
+        pickupPoint: { type: string, nullable: true }
+        flexMinutes: { type: integer, enum: [5, 10, 15] }
+        seats: { type: integer, minimum: 1, maximum: 4 }
+        sameGenderOnly: { type: boolean, default: false }
+        notes: { type: string, nullable: true }
+
+    CancelTripBody:
+      type: object
+      properties:
+        reason: { type: string, nullable: true }
+
+    RecurringTrip:
+      type: object
+      required: [id, driverId, originId, destinationId, daysOfWeek, departureTime, flexMinutes, seats, active]
+      properties:
+        id: { type: string }
+        driverId: { type: string }
+        originId: { type: string }
+        originName: { type: string }
+        destinationId: { type: string }
+        destinationName: { type: string }
+        daysOfWeek:
+          type: array
+          items: { type: integer, minimum: 0, maximum: 6 }
+        departureTime: { type: string }
+        flexMinutes: { type: integer, enum: [5, 10, 15] }
+        seats: { type: integer, minimum: 1, maximum: 4 }
+        sameGenderOnly: { type: boolean }
+        notes: { type: string, nullable: true }
+        active: { type: boolean }
+
+    CreateRecurringTripBody:
+      type: object
+      required: [originId, destinationId, daysOfWeek, departureTime, flexMinutes, seats]
+      properties:
+        originId: { type: string }
+        destinationId: { type: string }
+        daysOfWeek:
+          type: array
+          items: { type: integer, minimum: 0, maximum: 6 }
+        departureTime: { type: string }
+        flexMinutes: { type: integer, enum: [5, 10, 15] }
+        seats: { type: integer, minimum: 1, maximum: 4 }
+        sameGenderOnly: { type: boolean, default: false }
+        notes: { type: string, nullable: true }
+
+    MatchResult:
+      type: object
+      required: [trip, matchScore, timeOverlapMinutes]
+      properties:
+        trip: { $ref: "#/components/schemas/Trip" }
+        matchScore: { type: number, description: "0-100" }
+        timeOverlapMinutes: { type: integer }
+
+    NearbyMatch:
+      type: object
+      required: [trip, timeOverlapMinutes, proximityKm, destinationName]
+      description: |
+        Trip from the same origin going to a different but nearby destination.
+        Sorted by proximityKm ascending. Useful when no exact destination match exists.
+      properties:
+        trip: { $ref: "#/components/schemas/Trip" }
+        timeOverlapMinutes: { type: integer }
+        proximityKm: { type: number, description: "Distance from this trip's destination to the rider's requested destination" }
+        destinationName: { type: string }
+
+    MatchesResponse:
+      type: object
+      required: [matches, nearby]
+      properties:
+        matches:
+          type: array
+          items: { $ref: "#/components/schemas/MatchResult" }
+        nearby:
+          type: array
+          items: { $ref: "#/components/schemas/NearbyMatch" }
+
+    RideRequest:
+      type: object
+      required: [id, tripId, riderId, status, createdAt]
+      properties:
+        id: { type: string }
+        tripId: { type: string }
+        riderId: { type: string }
+        riderName: { type: string }
+        riderRating: { type: number, nullable: true }
+        riderGender: { $ref: "#/components/schemas/Gender" }
+        riderPhone: { type: string, nullable: true, description: "Revealed only after approval" }
+        riderNeighborhood: { type: string, nullable: true }
+        pickupPoint: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        status: { $ref: "#/components/schemas/RideRequestStatus" }
+        createdAt: { type: string, format: date-time }
+        trip:
+          oneOf:
+            - { $ref: "#/components/schemas/Trip" }
+            - { type: "null" }
+
+    CreateRideRequestBody:
+      type: object
+      required: [tripId]
+      properties:
+        tripId: { type: string }
+        pickupPoint: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+
+    Rating:
+      type: object
+      required: [id, tripId, fromUserId, toUserId, stars, createdAt]
+      properties:
+        id: { type: string }
+        tripId: { type: string }
+        fromUserId: { type: string }
+        toUserId: { type: string }
+        stars: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    CreateRatingBody:
+      type: object
+      required: [tripId, toUserId, stars]
+      properties:
+        tripId: { type: string }
+        toUserId: { type: string }
+        stars: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string, nullable: true }
+
+    DashboardSummary:
+      type: object
+      required:
+        [profileStatus, role, completedTripsAsDriver, completedTripsAsRider, fuelSavedRwfThisMonth, kmSharedThisMonth, pendingRequestsForMyTrips, myUpcomingApprovedRides]
+      properties:
+        profileStatus: { $ref: "#/components/schemas/AccountStatus" }
+        role: { $ref: "#/components/schemas/Role" }
+        completedTripsAsDriver: { type: integer }
+        completedTripsAsRider: { type: integer }
+        fuelSavedRwfThisMonth: { type: number }
+        kmSharedThisMonth: { type: number }
+        pendingRequestsForMyTrips: { type: integer }
+        myUpcomingApprovedRides: { type: integer }
+        nextTrip:
+          oneOf:
+            - { $ref: "#/components/schemas/Trip" }
+            - { type: "null" }
+        nextRide:
+          oneOf:
+            - { $ref: "#/components/schemas/RideRequest" }
+            - { type: "null" }
+        averageRating: { type: number, nullable: true }
+
+    ActivityItem:
+      type: object
+      required: [id, kind, title, occurredAt]
+      properties:
+        id: { type: string }
+        kind:
+          type: string
+          enum:
+            [trip_posted, trip_completed, request_received, request_approved, request_declined, rating_received, request_submitted, trip_cancelled]
+        title: { type: string }
+        subtitle: { type: string, nullable: true }
+        occurredAt: { type: string, format: date-time }
+        relatedTripId: { type: string, nullable: true }
+
+    AdminStats:
+      type: object
+      required:
+        [totalUsers, verifiedUsers, pendingUsers, weeklyActiveUsers, ridesCompletedThisWeek, matchesPerDay, noShowRatePct, totalFuelSavedRwf]
+      properties:
+        totalUsers: { type: integer }
+        verifiedUsers: { type: integer }
+        pendingUsers: { type: integer }
+        weeklyActiveUsers: { type: integer }
+        ridesCompletedThisWeek: { type: integer }
+        matchesPerDay: { type: number }
+        noShowRatePct: { type: number }
+        totalFuelSavedRwf: { type: number }
+        ridesByCorridor:
+          type: array
+          items:
+            type: object
+            required: [corridorLabel, rides]
+            properties:
+              corridorLabel: { type: string }
+              rides: { type: integer }
+        ridesByDay:
+          type: array
+          items:
+            type: object
+            required: [date, rides]
+            properties:
+              date: { type: string, format: date }
+              rides: { type: integer }
+
+    AdminUserRow:
+      type: object
+      required: [userId, fullName, role, status, createdAt]
+      properties:
+        userId: { type: string }
+        fullName: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        status: { $ref: "#/components/schemas/AccountStatus" }
+        neighborhoodName: { type: string, nullable: true }
+        employer: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        inviteLabel: { type: string, nullable: true }
+        completedTrips: { type: integer }
+        averageRating: { type: number, nullable: true }
+        idVerified: { type: boolean }
+        preferredLanguage: { $ref: "#/components/schemas/Language" }
+        createdAt: { type: string, format: date-time }
+
+    VerifyUserBody:
+      type: object
+      required: [status]
+      properties:
+        status: { $ref: "#/components/schemas/AccountStatus" }
+
+    InviteCode:
+      type: object
+      required: [id, code, label, maxUses, uses, createdAt]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        label: { type: string }
+        maxUses: { type: integer }
+        uses: { type: integer }
+        createdAt: { type: string, format: date-time }
+
+    CreateInviteBody:
+      type: object
+      required: [label, count]
+      properties:
+        label: { type: string, description: "Employer/community tag, e.g. Norrsken Pilot" }
+        count: { type: integer, minimum: 1, maximum: 100 }
+        maxUses: { type: integer, minimum: 1, default: 1 }
+
+    CreateNeighborhoodBody:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        sector: { type: string, nullable: true }
+
+    UpdateNeighborhoodBody:
+      type: object
+      properties:
+        name: { type: string }
+        sector: { type: string, nullable: true }
+
+    CreateCorridorBody:
+      type: object
+      required: [label, originId, destinationId, distanceKm]
+      properties:
+        label: { type: string }
+        originId: { type: string }
+        destinationId: { type: string }
+        distanceKm: { type: number }
+
+    UpdateCorridorBody:
+      type: object
+      properties:
+        label: { type: string }
+        originId: { type: string }
+        destinationId: { type: string }
+        distanceKm: { type: number }
+
+    UpdateConfigBody:
+      type: object
+      properties:
+        fuelPriceRwfPerLitre: { type: number }
+        dieselPriceRwfPerLitre: { type: number }
+        vehicleConsumptionLPer100Km: { type: number }
+
+    QuickPostDefaults:
+      type: object
+      required: [originId, destinationId]
+      properties:
+        originId: { type: string, nullable: true }
+        destinationId: { type: string, nullable: true }
+
+    RatingPrompt:
+      type: object
+      required: [tripId, rateUserId, rateUserName, role, departureDate, departureTime, routeLabel]
+      properties:
+        tripId: { type: string }
+        rateUserId: { type: string }
+        rateUserName: { type: string }
+        role: { type: string, enum: [driver, rider] }
+        departureDate: { type: string, format: date }
+        departureTime: { type: string }
+        routeLabel: { type: string }
+
+    PushSubscribeBody:
+      type: object
+      required: [endpoint, keys]
+      properties:
+        endpoint: { type: string }
+        keys:
+          type: object
+          required: [p256dh, auth]
+          properties:
+            p256dh: { type: string }
+            auth: { type: string }
+        userAgent: { type: string, nullable: true }
+
+    PushUnsubscribeBody:
+      type: object
+      required: [endpoint]
+      properties:
+        endpoint: { type: string }
+
+    CreateReportBody:
+      type: object
+      required: [reportedUserId, reason]
+      properties:
+        reportedUserId: { type: string }
+        tripId: { type: string, nullable: true }
+        reason: { type: string }
+        details: { type: string, nullable: true }
+
+    Report:
+      type: object
+      required: [id, reportedUserId, reason, status, createdAt]
+      properties:
+        id: { type: string }
+        reportedUserId: { type: string }
+        tripId: { type: string, nullable: true }
+        reason: { type: string }
+        status: { $ref: "#/components/schemas/ReportStatus" }
+        createdAt: { type: string, format: date-time }
+
+    AdminReport:
+      type: object
+      required: [id, reporterId, reportedUserId, reason, status, createdAt]
+      properties:
+        id: { type: string }
+        reporterId: { type: string }
+        reporterName: { type: string }
+        reportedUserId: { type: string }
+        reportedName: { type: string }
+        tripId: { type: string, nullable: true }
+        reason: { type: string }
+        details: { type: string, nullable: true }
+        status: { $ref: "#/components/schemas/ReportStatus" }
+        resolvedAt: { type: string, format: date-time, nullable: true }
+        resolvedByUserId: { type: string, nullable: true }
+        resolutionNote: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    UpdateReportBody:
+      type: object
+      required: [status]
+      properties:
+        status: { $ref: "#/components/schemas/ReportStatus" }
+        resolutionNote: { type: string, nullable: true }
+        blockUser: { type: boolean }
+
+    SetIdVerifiedBody:
+      type: object
+      required: [idVerified]
+      properties:
+        idVerified: { type: boolean }
+
+    InviteAnalytics:
+      type: object
+      required: [id, code, label, maxUses, uses, signups, firstTripUsers, conversionPct, createdAt]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        label: { type: string }
+        maxUses: { type: integer }
+        uses: { type: integer }
+        signups: { type: integer }
+        firstTripUsers: { type: integer }
+        conversionPct: { type: number }
+        topCorridors:
+          type: array
+          items:
+            type: object
+            required: [corridorLabel, rides]
+            properties:
+              corridorLabel: { type: string }
+              rides: { type: integer }
+        createdAt: { type: string, format: date-time }
