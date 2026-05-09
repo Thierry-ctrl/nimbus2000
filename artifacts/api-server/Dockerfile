@@ -3,7 +3,7 @@
 # ── Build stage ──────────────────────────────────────────────────────────────
 FROM node:24-alpine AS builder
 
-RUN npm install -g pnpm
+RUN npm install -g pnpm@10.33.0
 
 # Satisfies the root package.json preinstall guard that checks npm_config_user_agent.
 ENV npm_config_user_agent="pnpm/docker"
