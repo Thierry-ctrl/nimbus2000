@@ -5,6 +5,9 @@ FROM node:24-alpine AS builder
 
 RUN npm install -g pnpm
 
+# Satisfies the root package.json preinstall guard that checks npm_config_user_agent.
+ENV npm_config_user_agent="pnpm/docker"
+
 WORKDIR /repo
 
 # Vite bakes env vars into the static bundle at build time, so they must be
