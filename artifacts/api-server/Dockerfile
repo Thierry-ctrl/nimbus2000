@@ -18,7 +18,7 @@ RUN pnpm --filter @workspace/api-server run build
 # Strip dev deps to shrink the node_modules we copy into the runtime image.
 # pino transports + nodemailer (externalized by esbuild) still need to be
 # resolvable at runtime, so we can't ship without node_modules entirely.
-RUN pnpm prune --prod
+RUN pnpm prune --prod --config.confirmModulesPurge=false
 
 # ── Runtime stage ────────────────────────────────────────────────────────────
 FROM node:24-alpine AS runtime
