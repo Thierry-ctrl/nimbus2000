@@ -1,0 +1,111 @@
+# KigaliWeShare — Docker Compose stack for self-hosted deployment.
+#
+# Brings up Postgres, the Express API, and an nginx-served PWA on a single host.
+# Postgres is intentionally NOT exposed to the host network — only the web
+# container is reachable from outside. Data residency: this compose file pins
+# all stateful data to a local volume on whichever server it runs on, which
+# matters for Rwanda's NCSA data-residency requirement (see
+# KigaliWeShare_Monetization_Plan.md, Part 2 §12).
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-kigaliweshare}
+      POSTGRES_USER: ${POSTGRES_USER:-kgs}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kgs} -d ${POSTGRES_DB:-kigaliweshare}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  api:
+    build:
+      context: .
+      dockerfile: artifacts/api-server/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: "8080"
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-kgs}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kigaliweshare}
+
+      # Clerk
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:?CLERK_SECRET_KEY is required}
+
+      # Web push (VAPID)
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:?VAPID_PUBLIC_KEY is required}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:?VAPID_PRIVATE_KEY is required}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:pilot@kigaliweshare.rw}
+
+      # SMTP (optional — push notifications work without it)
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+
+      # MoMo Collections API — populated when monetization launches.
+      # See KigaliWeShare_Monetization_Plan.md Part 3 §3.4.
+      MOMO_COLLECTION_PRIMARY_KEY: ${MOMO_COLLECTION_PRIMARY_KEY:-}
+      MOMO_COLLECTION_API_USER: ${MOMO_COLLECTION_API_USER:-}
+      MOMO_COLLECTION_API_KEY: ${MOMO_COLLECTION_API_KEY:-}
+      MOMO_CALLBACK_URL: ${MOMO_CALLBACK_URL:-}
+      MOMO_TARGET_ENVIRONMENT: ${MOMO_TARGET_ENVIRONMENT:-sandbox}
+      MOMO_CURRENCY: ${MOMO_CURRENCY:-RWF}
+    networks:
+      - internal
+
+  web:
+    build:
+      context: .
+      dockerfile: artifacts/kigaliweshare/Dockerfile
+      args:
+        VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:?VITE_CLERK_PUBLISHABLE_KEY is required}
+        VITE_CLERK_PROXY_URL: ${VITE_CLERK_PROXY_URL:-}
+        BASE_PATH: ${BASE_PATH:-/}
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-80}:80"
+    networks:
+      - internal
+
+  # One-shot service for running Drizzle schema pushes. Opt-in via profile so
+  # `docker compose up` never runs migrations automatically.
+  #
+  #   docker compose --profile migrate run --rm migrate
+  #
+  # Switch the command to `push-force` if you need to accept data-loss prompts.
+  migrate:
+    build:
+      context: .
+      dockerfile: artifacts/api-server/Dockerfile
+      target: builder
+    profiles: ["migrate"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-kgs}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-kigaliweshare}
+    working_dir: /repo
+    command: pnpm --filter @workspace/db run push
+    networks:
+      - internal
+
+volumes:
+  postgres_data:
+
+networks:
+  internal:
+    driver: bridge

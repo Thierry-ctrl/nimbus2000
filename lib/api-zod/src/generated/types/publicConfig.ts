@@ -14,4 +14,11 @@ export interface PublicConfig {
   currencyCode: string;
   rnpEmergencyNumber?: string;
   vapidPublicKey?: string;
+  /** Kill switch for the platform service fee. When false, clients MUST
+hide all fee UI and treat fee fields as absent. Backward-compatible
+with pre-monetization clients.
+ */
+  serviceFeeEnabled: boolean;
+  /** Percentage applied to the per-rider fuel share */
+  serviceFeePct: number;
 }

@@ -89,6 +89,11 @@ router.post("/requests", requireAuth, async (req, res) => {
       riderId: userId,
       pickupPoint: req.body?.pickupPoint ?? null,
       notes: req.body?.notes ?? null,
+      // Snapshot the fee from the trip so the rider's quote can't shift if
+      // platformConfig changes later. Stored separately from approval state
+      // — fee status is managed by the payments flow, never gates seat
+      // approval.
+      serviceFeeAmount: t.serviceFeePerRider ?? 0,
     })
     .returning();
   await sendNotification({

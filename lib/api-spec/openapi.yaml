@@ -17,6 +17,7 @@ tags:
   - name: ratings
   - name: dashboard
   - name: admin
+  - name: payments
 
 paths:
   /healthz:
@@ -444,6 +445,122 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Rating" }
+
+  /payments/initiate:
+    post:
+      operationId: initiateServiceFeePayment
+      tags: [payments]
+      summary: Start a MoMo Collections RequestToPay for the rider's service fee
+      description: |
+        Triggers a MoMo Collections API RequestToPay against the rider's phone.
+        Requires the ride request to be approved. The fuel share is paid OUT
+        of band (rider→driver MoMo P2P or cash) and is never touched by this
+        endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PaymentInitiateBody" }
+      responses:
+        "200":
+          description: Payment initiated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentInitiateResponse" }
+        "400": { description: Invalid request }
+        "403": { description: Forbidden }
+        "409": { description: Fee already paid or refunded }
+        "503": { description: Service fee not enabled }
+
+  /payments/callback:
+    post:
+      operationId: momoPaymentCallback
+      tags: [payments]
+      summary: Webhook receiver for MoMo Collections payment status updates
+      description: |
+        Called by MTN MoMo to confirm payment success/failure. Validates the
+        callback signature before updating fee state.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PaymentCallbackPayload" }
+      responses:
+        "200": { description: Acknowledged }
+        "400": { description: Invalid payload }
+        "401": { description: Invalid signature }
+
+  /payments/{rideRequestId}/status:
+    get:
+      operationId: getServiceFeeStatus
+      tags: [payments]
+      summary: Current payment status for a ride request's service fee
+      parameters:
+        - in: path
+          name: rideRequestId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentStatusResponse" }
+        "404": { description: Not found }
+
+  /payments/cash-fee/{rideRequestId}:
+    post:
+      operationId: recordCashFee
+      tags: [payments]
+      summary: Mark a service fee as paid via cash fallback when MoMo is unavailable
+      parameters:
+        - in: path
+          name: rideRequestId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentStatusResponse" }
+        "403": { description: Forbidden }
+        "409": { description: Already settled }
+
+  /admin/payments/{feeId}/refund:
+    post:
+      operationId: refundServiceFee
+      tags: [payments, admin]
+      summary: Mark a service fee as refunded (admin only)
+      parameters:
+        - in: path
+          name: feeId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefundFeeBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServiceFeeRecord" }
+        "404": { description: Not found }
+
+  /admin/revenue:
+    get:
+      operationId: getRevenueStats
+      tags: [admin, payments]
+      summary: Aggregated revenue + payment health stats (admin)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RevenueStats" }
 
   /dashboard/summary:
     get:
@@ -883,7 +1000,7 @@ components:
 
     PublicConfig:
       type: object
-      required: [fuelPriceRwfPerLitre, dieselPriceRwfPerLitre, vehicleConsumptionLPer100Km, currencyCode]
+      required: [fuelPriceRwfPerLitre, dieselPriceRwfPerLitre, vehicleConsumptionLPer100Km, currencyCode, serviceFeeEnabled, serviceFeePct]
       properties:
         fuelPriceRwfPerLitre: { type: number }
         dieselPriceRwfPerLitre: { type: number }
@@ -891,6 +1008,13 @@ components:
         currencyCode: { type: string, description: "e.g. RWF" }
         rnpEmergencyNumber: { type: string }
         vapidPublicKey: { type: string }
+        serviceFeeEnabled:
+          type: boolean
+          description: |
+            Kill switch for the platform service fee. When false, clients MUST
+            hide all fee UI and treat fee fields as absent. Backward-compatible
+            with pre-monetization clients.
+        serviceFeePct: { type: integer, description: "Percentage applied to the per-rider fuel share" }
 
     FuelType:
       type: string
@@ -1037,6 +1161,17 @@ components:
           oneOf:
             - { $ref: "#/components/schemas/FuelShare" }
             - { type: "null" }
+        serviceFeePerRider:
+          type: integer
+          nullable: true
+          description: |
+            Per-rider platform service fee snapshot, computed at trip-post time.
+            Only populated when serviceFeeEnabled is true. NEVER summed with the
+            fuel share — the two amounts must be displayed as separate line items.
+        feeBreakdown:
+          oneOf:
+            - { $ref: "#/components/schemas/FeeBreakdown" }
+            - { type: "null" }
 
     FuelShare:
       type: object
@@ -1171,6 +1306,18 @@ components:
         notes: { type: string, nullable: true }
         status: { $ref: "#/components/schemas/RideRequestStatus" }
         createdAt: { type: string, format: date-time }
+        serviceFeeAmount:
+          type: integer
+          nullable: true
+          description: Service fee owed by this rider (omitted when serviceFeeEnabled is false)
+        serviceFeeStatus:
+          oneOf:
+            - { $ref: "#/components/schemas/FeeStatus" }
+            - { type: "null" }
+        feeBreakdown:
+          oneOf:
+            - { $ref: "#/components/schemas/FeeBreakdown" }
+            - { type: "null" }
         trip:
           oneOf:
             - { $ref: "#/components/schemas/Trip" }
@@ -1463,3 +1610,135 @@ components:
               corridorLabel: { type: string }
               rides: { type: integer }
         createdAt: { type: string, format: date-time }
+
+    FeeStatus:
+      type: string
+      enum: [unpaid, paid, waived, refunded]
+
+    PaymentMethod:
+      type: string
+      enum: [momo_mtn, momo_airtel, cash_fee]
+
+    MomoStatus:
+      type: string
+      enum: [pending, success, failed, refunded]
+
+    FeeBreakdown:
+      type: object
+      required: [fuelShareRwf, serviceFeeRwf, totalRiderPaysRwf, feePercentage, disclaimerText]
+      description: |
+        Cost breakdown shown to riders. The fuel share and service fee MUST be
+        displayed as separate visual blocks — never summed into a single price.
+        This is the regulatory boundary between cost-sharing (off-platform) and
+        platform service (on-platform).
+      properties:
+        fuelShareRwf:
+          type: integer
+          description: Per-rider fuel share (paid directly to driver, off-platform)
+        serviceFeeRwf:
+          type: integer
+          description: Per-rider service fee (paid to KigaliWeShare, on-platform)
+        totalRiderPaysRwf:
+          type: integer
+          description: Sum shown for transparency only — NOT collected as a single charge
+        feePercentage: { type: integer }
+        disclaimerText: { type: string }
+
+    PaymentInitiateBody:
+      type: object
+      required: [rideRequestId, payerPhone]
+      properties:
+        rideRequestId: { type: string }
+        payerPhone: { type: string, description: "MoMo MSISDN, e.g. 2507XXXXXXXX" }
+        paymentMethod:
+          oneOf:
+            - { $ref: "#/components/schemas/PaymentMethod" }
+            - { type: "null" }
+
+    PaymentInitiateResponse:
+      type: object
+      required: [feeId, momoReferenceId, status, amountRwf]
+      properties:
+        feeId: { type: string }
+        momoReferenceId: { type: string }
+        status: { $ref: "#/components/schemas/MomoStatus" }
+        amountRwf: { type: integer }
+
+    PaymentStatusResponse:
+      type: object
+      required: [rideRequestId, serviceFeeStatus, amountRwf]
+      properties:
+        rideRequestId: { type: string }
+        feeId: { type: string, nullable: true }
+        serviceFeeStatus: { $ref: "#/components/schemas/FeeStatus" }
+        momoStatus:
+          oneOf:
+            - { $ref: "#/components/schemas/MomoStatus" }
+            - { type: "null" }
+        paymentMethod:
+          oneOf:
+            - { $ref: "#/components/schemas/PaymentMethod" }
+            - { type: "null" }
+        amountRwf: { type: integer }
+        failureReason: { type: string, nullable: true }
+        paidAt: { type: string, format: date-time, nullable: true }
+
+    PaymentCallbackPayload:
+      type: object
+      required: [referenceId, status]
+      description: MTN MoMo Collections webhook payload (validated by signature)
+      properties:
+        referenceId: { type: string }
+        status: { type: string, description: "MoMo status — SUCCESSFUL, FAILED, etc." }
+        financialTransactionId: { type: string, nullable: true }
+        reason: { type: string, nullable: true }
+
+    RefundFeeBody:
+      type: object
+      properties:
+        reason: { type: string, nullable: true }
+
+    ServiceFeeRecord:
+      type: object
+      required: [id, rideRequestId, riderId, amountRwf, feePct, momoStatus, paymentMethod, createdAt]
+      properties:
+        id: { type: string }
+        tripId: { type: string }
+        rideRequestId: { type: string }
+        riderId: { type: string }
+        amountRwf: { type: integer }
+        feePct: { type: integer }
+        baseFuelShareRwf: { type: integer }
+        momoTransactionId: { type: string, nullable: true }
+        momoReferenceId: { type: string, nullable: true }
+        momoStatus: { $ref: "#/components/schemas/MomoStatus" }
+        paymentMethod: { $ref: "#/components/schemas/PaymentMethod" }
+        failureReason: { type: string, nullable: true }
+        paidAt: { type: string, format: date-time, nullable: true }
+        refundedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    RevenueStats:
+      type: object
+      required:
+        [totalCollectedRwf, todayRwf, weekRwf, monthRwf, paymentSuccessRatePct, pendingPayments, failedPayments, refundsIssuedRwf, averageFeeRwf, byCorridor]
+      properties:
+        totalCollectedRwf: { type: integer }
+        todayRwf: { type: integer }
+        weekRwf: { type: integer }
+        monthRwf: { type: integer }
+        paymentSuccessRatePct: { type: number }
+        pendingPayments: { type: integer }
+        failedPayments: { type: integer }
+        refundsIssuedRwf: { type: integer }
+        averageFeeRwf: { type: integer }
+        byCorridor:
+          type: array
+          items:
+            type: object
+            required: [corridorLabel, rides, revenueRwf]
+            properties:
+              corridorLabel: { type: string }
+              rides: { type: integer }
+              revenueRwf: { type: integer }
+

@@ -72,3 +72,36 @@ export function computeFuelShare(input: FuelShareInput): FuelShareResult {
     totalRiderShareRwf,
   };
 }
+
+// ─── Service fee ──────────────────────────────────────────────────────────────
+// The platform service fee is computed as a percentage of the per-rider fuel
+// share. It is INTENTIONALLY a separate function — the fuel share is a
+// cost-sharing computation (off-platform); the service fee is a platform
+// charge (on-platform). They must never be combined into a single number in
+// any API response, UI rendering, or computation. This separation is the
+// regulatory boundary KigaliWeShare relies on. See
+// KigaliWeShare_Monetization_Plan.md, Part 4 §4.1.
+
+export interface ServiceFeeConfigInput {
+  enabled: boolean;
+  pct: number;
+  minRwf: number;
+  maxRwf: number;
+  freeKm: number;
+}
+
+export function calculateServiceFee(
+  fuelSharePerRider: number,
+  distanceKm: number,
+  cfg: ServiceFeeConfigInput,
+): number {
+  if (!cfg.enabled) return 0;
+  if (fuelSharePerRider <= 0) return 0;
+  if (distanceKm < cfg.freeKm) return 0;
+
+  const raw = (fuelSharePerRider * cfg.pct) / 100;
+  const rounded = round100(raw);
+  if (rounded < cfg.minRwf) return cfg.minRwf;
+  if (rounded > cfg.maxRwf) return cfg.maxRwf;
+  return rounded;
+}

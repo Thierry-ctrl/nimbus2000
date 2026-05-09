@@ -23,10 +23,11 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Star, Phone, ArrowLeft, MessageCircle, Flag, ShieldCheck } from "lucide-react";
+import { Star, Phone, ArrowLeft, MessageCircle, Flag, ShieldCheck, Sparkles } from "lucide-react";
 import { formatDate, formatTime } from "@/lib/format";
 import { useToast } from "@/hooks/use-toast";
 import { ReportUserDialog } from "@/components/ReportUserDialog";
+import { MoMoPaymentFlow } from "@/components/MoMoPaymentFlow";
 
 export default function TripDetailPage() {
   const [, params] = useRoute("/trips/:tripId");
@@ -52,6 +53,7 @@ export default function TripDetailPage() {
   const [reqNotes, setReqNotes] = useState("");
   const [stars, setStars] = useState(5);
   const [comment, setComment] = useState("");
+  const [feeFlowOpen, setFeeFlowOpen] = useState(false);
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
@@ -186,10 +188,75 @@ export default function TripDetailPage() {
                 </>
               )}
               <div className="text-xs text-muted-foreground pt-1">
-                KigaliWeShare doesn't process payments. Pay the driver directly via MoMo or cash. This is a friendly cost-share between neighbours, not a fare.
+                KigaliWeShare doesn't process this. Pay the driver directly via MoMo or cash. This is a friendly cost-share between neighbours, not a fare.
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/*
+          Service fee — RENDERED AS A SEPARATE BLOCK from the fuel share above.
+          The fuel share goes driver→rider off-platform; this fee goes
+          rider→KigaliWeShare. The two amounts MUST stay visually distinct
+          and never be combined into a single price. Hidden entirely when
+          serviceFeeEnabled is false (feeBreakdown will be null).
+        */}
+        {trip.feeBreakdown && (
+          <Card className="border-secondary/40 bg-secondary/5">
+            <CardContent className="py-4 space-y-2">
+              <div className="text-xs uppercase text-muted-foreground tracking-wide flex items-center gap-1">
+                <Sparkles className="h-3 w-3" /> KigaliWeShare service fee
+              </div>
+              <div className="text-2xl font-serif font-bold">
+                {trip.feeBreakdown.serviceFeeRwf.toLocaleString()} RWF
+                <span className="text-xs font-normal text-muted-foreground ml-2">
+                  ({trip.feeBreakdown.feePercentage}% of fuel share)
+                </span>
+              </div>
+              {!isDriver && myReq?.serviceFeeStatus === "paid" && (
+                <div className="text-sm text-green-700 font-medium">
+                  ✓ Fee paid
+                </div>
+              )}
+              {!isDriver &&
+                myReq?.status === "approved" &&
+                myReq.serviceFeeStatus !== "paid" &&
+                myReq.serviceFeeStatus !== "refunded" && (
+                  <Button
+                    size="sm"
+                    className="mt-1"
+                    onClick={() => setFeeFlowOpen(true)}
+                  >
+                    Pay service fee
+                  </Button>
+                )}
+              {!isDriver && !myReq && (
+                <div className="text-sm text-muted-foreground">
+                  You'll pay this once the driver approves your request.
+                </div>
+              )}
+              {isDriver && (
+                <div className="text-sm text-muted-foreground">
+                  Riders pay this directly to KigaliWeShare. You receive the
+                  full fuel share separately.
+                </div>
+              )}
+              <div className="text-xs text-muted-foreground pt-1">
+                {trip.feeBreakdown.disclaimerText}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {!isDriver && myReq && (
+          <MoMoPaymentFlow
+            open={feeFlowOpen}
+            onOpenChange={setFeeFlowOpen}
+            rideRequestId={myReq.id}
+            tripId={trip.id}
+            amountRwf={myReq.serviceFeeAmount ?? 0}
+            defaultPhone={me?.phone ?? null}
+          />
         )}
 
         <Card>

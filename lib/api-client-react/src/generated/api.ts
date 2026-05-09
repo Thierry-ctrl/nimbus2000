@@ -43,6 +43,10 @@ import type {
   ListMyTripsParams,
   MatchesResponse,
   Neighborhood,
+  PaymentCallbackPayload,
+  PaymentInitiateBody,
+  PaymentInitiateResponse,
+  PaymentStatusResponse,
   Profile,
   PublicConfig,
   PublicProfile,
@@ -53,8 +57,11 @@ import type {
   RatingPrompt,
   RecurringTrip,
   RedeemInviteBody,
+  RefundFeeBody,
   Report,
+  RevenueStats,
   RideRequest,
+  ServiceFeeRecord,
   SetIdVerifiedBody,
   SetUserIdVerified200,
   SubscribePush201,
@@ -2181,6 +2188,534 @@ export const useCreateRating = <
 > => {
   return useMutation(getCreateRatingMutationOptions(options));
 };
+
+/**
+ * Triggers a MoMo Collections API RequestToPay against the rider's phone.
+Requires the ride request to be approved. The fuel share is paid OUT
+of band (rider→driver MoMo P2P or cash) and is never touched by this
+endpoint.
+
+ * @summary Start a MoMo Collections RequestToPay for the rider's service fee
+ */
+export const getInitiateServiceFeePaymentUrl = () => {
+  return `/api/payments/initiate`;
+};
+
+export const initiateServiceFeePayment = async (
+  paymentInitiateBody: PaymentInitiateBody,
+  options?: RequestInit,
+): Promise<PaymentInitiateResponse> => {
+  return customFetch<PaymentInitiateResponse>(
+    getInitiateServiceFeePaymentUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(paymentInitiateBody),
+    },
+  );
+};
+
+export const getInitiateServiceFeePaymentMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof initiateServiceFeePayment>>,
+    TError,
+    { data: BodyType<PaymentInitiateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof initiateServiceFeePayment>>,
+  TError,
+  { data: BodyType<PaymentInitiateBody> },
+  TContext
+> => {
+  const mutationKey = ["initiateServiceFeePayment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof initiateServiceFeePayment>>,
+    { data: BodyType<PaymentInitiateBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return initiateServiceFeePayment(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type InitiateServiceFeePaymentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof initiateServiceFeePayment>>
+>;
+export type InitiateServiceFeePaymentMutationBody =
+  BodyType<PaymentInitiateBody>;
+export type InitiateServiceFeePaymentMutationError = ErrorType<void>;
+
+/**
+ * @summary Start a MoMo Collections RequestToPay for the rider's service fee
+ */
+export const useInitiateServiceFeePayment = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof initiateServiceFeePayment>>,
+    TError,
+    { data: BodyType<PaymentInitiateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof initiateServiceFeePayment>>,
+  TError,
+  { data: BodyType<PaymentInitiateBody> },
+  TContext
+> => {
+  return useMutation(getInitiateServiceFeePaymentMutationOptions(options));
+};
+
+/**
+ * Called by MTN MoMo to confirm payment success/failure. Validates the
+callback signature before updating fee state.
+
+ * @summary Webhook receiver for MoMo Collections payment status updates
+ */
+export const getMomoPaymentCallbackUrl = () => {
+  return `/api/payments/callback`;
+};
+
+export const momoPaymentCallback = async (
+  paymentCallbackPayload: PaymentCallbackPayload,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getMomoPaymentCallbackUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(paymentCallbackPayload),
+  });
+};
+
+export const getMomoPaymentCallbackMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof momoPaymentCallback>>,
+    TError,
+    { data: BodyType<PaymentCallbackPayload> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof momoPaymentCallback>>,
+  TError,
+  { data: BodyType<PaymentCallbackPayload> },
+  TContext
+> => {
+  const mutationKey = ["momoPaymentCallback"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof momoPaymentCallback>>,
+    { data: BodyType<PaymentCallbackPayload> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return momoPaymentCallback(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MomoPaymentCallbackMutationResult = NonNullable<
+  Awaited<ReturnType<typeof momoPaymentCallback>>
+>;
+export type MomoPaymentCallbackMutationBody = BodyType<PaymentCallbackPayload>;
+export type MomoPaymentCallbackMutationError = ErrorType<void>;
+
+/**
+ * @summary Webhook receiver for MoMo Collections payment status updates
+ */
+export const useMomoPaymentCallback = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof momoPaymentCallback>>,
+    TError,
+    { data: BodyType<PaymentCallbackPayload> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof momoPaymentCallback>>,
+  TError,
+  { data: BodyType<PaymentCallbackPayload> },
+  TContext
+> => {
+  return useMutation(getMomoPaymentCallbackMutationOptions(options));
+};
+
+/**
+ * @summary Current payment status for a ride request's service fee
+ */
+export const getGetServiceFeeStatusUrl = (rideRequestId: string) => {
+  return `/api/payments/${rideRequestId}/status`;
+};
+
+export const getServiceFeeStatus = async (
+  rideRequestId: string,
+  options?: RequestInit,
+): Promise<PaymentStatusResponse> => {
+  return customFetch<PaymentStatusResponse>(
+    getGetServiceFeeStatusUrl(rideRequestId),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetServiceFeeStatusQueryKey = (rideRequestId: string) => {
+  return [`/api/payments/${rideRequestId}/status`] as const;
+};
+
+export const getGetServiceFeeStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getServiceFeeStatus>>,
+  TError = ErrorType<void>,
+>(
+  rideRequestId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getServiceFeeStatus>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetServiceFeeStatusQueryKey(rideRequestId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getServiceFeeStatus>>
+  > = ({ signal }) =>
+    getServiceFeeStatus(rideRequestId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!rideRequestId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getServiceFeeStatus>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetServiceFeeStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getServiceFeeStatus>>
+>;
+export type GetServiceFeeStatusQueryError = ErrorType<void>;
+
+/**
+ * @summary Current payment status for a ride request's service fee
+ */
+
+export function useGetServiceFeeStatus<
+  TData = Awaited<ReturnType<typeof getServiceFeeStatus>>,
+  TError = ErrorType<void>,
+>(
+  rideRequestId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getServiceFeeStatus>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetServiceFeeStatusQueryOptions(
+    rideRequestId,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Mark a service fee as paid via cash fallback when MoMo is unavailable
+ */
+export const getRecordCashFeeUrl = (rideRequestId: string) => {
+  return `/api/payments/cash-fee/${rideRequestId}`;
+};
+
+export const recordCashFee = async (
+  rideRequestId: string,
+  options?: RequestInit,
+): Promise<PaymentStatusResponse> => {
+  return customFetch<PaymentStatusResponse>(
+    getRecordCashFeeUrl(rideRequestId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getRecordCashFeeMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recordCashFee>>,
+    TError,
+    { rideRequestId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof recordCashFee>>,
+  TError,
+  { rideRequestId: string },
+  TContext
+> => {
+  const mutationKey = ["recordCashFee"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof recordCashFee>>,
+    { rideRequestId: string }
+  > = (props) => {
+    const { rideRequestId } = props ?? {};
+
+    return recordCashFee(rideRequestId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RecordCashFeeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof recordCashFee>>
+>;
+
+export type RecordCashFeeMutationError = ErrorType<void>;
+
+/**
+ * @summary Mark a service fee as paid via cash fallback when MoMo is unavailable
+ */
+export const useRecordCashFee = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recordCashFee>>,
+    TError,
+    { rideRequestId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof recordCashFee>>,
+  TError,
+  { rideRequestId: string },
+  TContext
+> => {
+  return useMutation(getRecordCashFeeMutationOptions(options));
+};
+
+/**
+ * @summary Mark a service fee as refunded (admin only)
+ */
+export const getRefundServiceFeeUrl = (feeId: string) => {
+  return `/api/admin/payments/${feeId}/refund`;
+};
+
+export const refundServiceFee = async (
+  feeId: string,
+  refundFeeBody?: RefundFeeBody,
+  options?: RequestInit,
+): Promise<ServiceFeeRecord> => {
+  return customFetch<ServiceFeeRecord>(getRefundServiceFeeUrl(feeId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(refundFeeBody),
+  });
+};
+
+export const getRefundServiceFeeMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof refundServiceFee>>,
+    TError,
+    { feeId: string; data: BodyType<RefundFeeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof refundServiceFee>>,
+  TError,
+  { feeId: string; data: BodyType<RefundFeeBody> },
+  TContext
+> => {
+  const mutationKey = ["refundServiceFee"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof refundServiceFee>>,
+    { feeId: string; data: BodyType<RefundFeeBody> }
+  > = (props) => {
+    const { feeId, data } = props ?? {};
+
+    return refundServiceFee(feeId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RefundServiceFeeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof refundServiceFee>>
+>;
+export type RefundServiceFeeMutationBody = BodyType<RefundFeeBody>;
+export type RefundServiceFeeMutationError = ErrorType<void>;
+
+/**
+ * @summary Mark a service fee as refunded (admin only)
+ */
+export const useRefundServiceFee = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof refundServiceFee>>,
+    TError,
+    { feeId: string; data: BodyType<RefundFeeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof refundServiceFee>>,
+  TError,
+  { feeId: string; data: BodyType<RefundFeeBody> },
+  TContext
+> => {
+  return useMutation(getRefundServiceFeeMutationOptions(options));
+};
+
+/**
+ * @summary Aggregated revenue + payment health stats (admin)
+ */
+export const getGetRevenueStatsUrl = () => {
+  return `/api/admin/revenue`;
+};
+
+export const getRevenueStats = async (
+  options?: RequestInit,
+): Promise<RevenueStats> => {
+  return customFetch<RevenueStats>(getGetRevenueStatsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetRevenueStatsQueryKey = () => {
+  return [`/api/admin/revenue`] as const;
+};
+
+export const getGetRevenueStatsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getRevenueStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getRevenueStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetRevenueStatsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getRevenueStats>>> = ({
+    signal,
+  }) => getRevenueStats({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getRevenueStats>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetRevenueStatsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getRevenueStats>>
+>;
+export type GetRevenueStatsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Aggregated revenue + payment health stats (admin)
+ */
+
+export function useGetRevenueStats<
+  TData = Awaited<ReturnType<typeof getRevenueStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getRevenueStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetRevenueStatsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Personalized dashboard for the current user (driver+rider stats, fuel saved, next trip, pending requests)

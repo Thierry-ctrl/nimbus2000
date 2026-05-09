@@ -77,6 +77,13 @@ export interface PublicConfig {
   currencyCode: string;
   rnpEmergencyNumber?: string;
   vapidPublicKey?: string;
+  /** Kill switch for the platform service fee. When false, clients MUST
+hide all fee UI and treat fee fields as absent. Backward-compatible
+with pre-monetization clients.
+ */
+  serviceFeeEnabled: boolean;
+  /** Percentage applied to the per-rider fuel share */
+  serviceFeePct: number;
 }
 
 export type FuelType = (typeof FuelType)[keyof typeof FuelType];
@@ -225,6 +232,24 @@ export interface FuelShare {
   totalRiderShareRwf: number;
 }
 
+/**
+ * Cost breakdown shown to riders. The fuel share and service fee MUST be
+displayed as separate visual blocks — never summed into a single price.
+This is the regulatory boundary between cost-sharing (off-platform) and
+platform service (on-platform).
+
+ */
+export interface FeeBreakdown {
+  /** Per-rider fuel share (paid directly to driver, off-platform) */
+  fuelShareRwf: number;
+  /** Per-rider service fee (paid to KigaliWeShare, on-platform) */
+  serviceFeeRwf: number;
+  /** Sum shown for transparency only — NOT collected as a single charge */
+  totalRiderPaysRwf: number;
+  feePercentage: number;
+  disclaimerText: string;
+}
+
 export interface Trip {
   id: string;
   driverId: string;
@@ -248,7 +273,22 @@ export interface Trip {
   status: TripStatus;
   cancelReason?: string | null;
   fuelShare?: FuelShare | null;
+  /** Per-rider platform service fee snapshot, computed at trip-post time.
+Only populated when serviceFeeEnabled is true. NEVER summed with the
+fuel share — the two amounts must be displayed as separate line items.
+ */
+  serviceFeePerRider?: number | null;
+  feeBreakdown?: FeeBreakdown | null;
 }
+
+export type FeeStatus = (typeof FeeStatus)[keyof typeof FeeStatus];
+
+export const FeeStatus = {
+  unpaid: "unpaid",
+  paid: "paid",
+  waived: "waived",
+  refunded: "refunded",
+} as const;
 
 export interface RideRequest {
   id: string;
@@ -264,6 +304,10 @@ export interface RideRequest {
   notes?: string | null;
   status: RideRequestStatus;
   createdAt: string;
+  /** Service fee owed by this rider (omitted when serviceFeeEnabled is false) */
+  serviceFeeAmount?: number | null;
+  serviceFeeStatus?: FeeStatus | null;
+  feeBreakdown?: FeeBreakdown | null;
   trip?: Trip | null;
 }
 
@@ -640,6 +684,100 @@ export interface InviteAnalytics {
   conversionPct: number;
   topCorridors?: InviteAnalyticsTopCorridorsItem[];
   createdAt: string;
+}
+
+export type PaymentMethod = (typeof PaymentMethod)[keyof typeof PaymentMethod];
+
+export const PaymentMethod = {
+  momo_mtn: "momo_mtn",
+  momo_airtel: "momo_airtel",
+  cash_fee: "cash_fee",
+} as const;
+
+export type MomoStatus = (typeof MomoStatus)[keyof typeof MomoStatus];
+
+export const MomoStatus = {
+  pending: "pending",
+  success: "success",
+  failed: "failed",
+  refunded: "refunded",
+} as const;
+
+export interface PaymentInitiateBody {
+  rideRequestId: string;
+  /** MoMo MSISDN, e.g. 2507XXXXXXXX */
+  payerPhone: string;
+  paymentMethod?: PaymentMethod | null;
+}
+
+export interface PaymentInitiateResponse {
+  feeId: string;
+  momoReferenceId: string;
+  status: MomoStatus;
+  amountRwf: number;
+}
+
+export interface PaymentStatusResponse {
+  rideRequestId: string;
+  feeId?: string | null;
+  serviceFeeStatus: FeeStatus;
+  momoStatus?: MomoStatus | null;
+  paymentMethod?: PaymentMethod | null;
+  amountRwf: number;
+  failureReason?: string | null;
+  paidAt?: string | null;
+}
+
+/**
+ * MTN MoMo Collections webhook payload (validated by signature)
+ */
+export interface PaymentCallbackPayload {
+  referenceId: string;
+  /** MoMo status — SUCCESSFUL, FAILED, etc. */
+  status: string;
+  financialTransactionId?: string | null;
+  reason?: string | null;
+}
+
+export interface RefundFeeBody {
+  reason?: string | null;
+}
+
+export interface ServiceFeeRecord {
+  id: string;
+  tripId?: string;
+  rideRequestId: string;
+  riderId: string;
+  amountRwf: number;
+  feePct: number;
+  baseFuelShareRwf?: number;
+  momoTransactionId?: string | null;
+  momoReferenceId?: string | null;
+  momoStatus: MomoStatus;
+  paymentMethod: PaymentMethod;
+  failureReason?: string | null;
+  paidAt?: string | null;
+  refundedAt?: string | null;
+  createdAt: string;
+}
+
+export type RevenueStatsByCorridorItem = {
+  corridorLabel: string;
+  rides: number;
+  revenueRwf: number;
+};
+
+export interface RevenueStats {
+  totalCollectedRwf: number;
+  todayRwf: number;
+  weekRwf: number;
+  monthRwf: number;
+  paymentSuccessRatePct: number;
+  pendingPayments: number;
+  failedPayments: number;
+  refundsIssuedRwf: number;
+  averageFeeRwf: number;
+  byCorridor: RevenueStatsByCorridorItem[];
 }
 
 export type ListMyTripsParams = {

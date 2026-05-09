@@ -51,6 +51,13 @@ const CONFIG: Array<{ key: string; value: string }> = [
   { key: "dieselPriceRwfPerLitre", value: "2205" },
   { key: "vehicleConsumptionLPer100Km", value: "8" },
   { key: "currency", value: "RWF" },
+  // Service fee defaults — kill switch starts OFF. Enable per the
+  // monetization rollout in KigaliWeShare_Monetization_Plan.md.
+  { key: "serviceFeeEnabled", value: "false" },
+  { key: "serviceFeePct", value: "25" },
+  { key: "serviceFeeMinRwf", value: "50" },
+  { key: "serviceFeeMaxRwf", value: "5000" },
+  { key: "serviceFeeFreeKm", value: "3" },
 ];
 
 async function upsertNeighborhoods() {

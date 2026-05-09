@@ -63,6 +63,8 @@ export default function PostTripPage() {
     destinationId: string;
     originName: string;
     destinationName: string;
+    fuelSharePerRiderRwf: number | null;
+    serviceFeePerRiderRwf: number | null;
   } | null>(null);
 
   const { data: profile } = useGetMyProfile({
@@ -117,6 +119,8 @@ export default function PostTripPage() {
         destinationId: created.destinationId,
         originName: created.originName ?? "",
         destinationName: created.destinationName ?? "",
+        fuelSharePerRiderRwf: created.fuelShare?.perPassengerRwf ?? null,
+        serviceFeePerRiderRwf: created.serviceFeePerRider ?? null,
       });
     } catch {
       toast({ title: "Could not post trip", variant: "destructive" });
@@ -287,6 +291,36 @@ export default function PostTripPage() {
             </CardContent>
           </Card>
         )}
+
+        {lastPostedTrip &&
+          lastPostedTrip.fuelSharePerRiderRwf !== null &&
+          lastPostedTrip.serviceFeePerRiderRwf !== null &&
+          lastPostedTrip.serviceFeePerRiderRwf > 0 && (
+            <Card>
+              <CardContent className="py-4 space-y-2">
+                <div className="text-xs uppercase text-muted-foreground tracking-wide">
+                  What riders will see
+                </div>
+                <div className="text-sm">
+                  Riders will pay ~
+                  <span className="font-semibold">
+                    {lastPostedTrip.fuelSharePerRiderRwf.toLocaleString()} RWF
+                  </span>{" "}
+                  fuel share <span className="text-muted-foreground">(to you)</span>
+                  {" + "}
+                  <span className="font-semibold">
+                    {lastPostedTrip.serviceFeePerRiderRwf.toLocaleString()} RWF
+                  </span>{" "}
+                  service fee{" "}
+                  <span className="text-muted-foreground">(to KigaliWeShare)</span>.
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  You receive the full fuel share. The service fee never touches
+                  your earnings.
+                </div>
+              </CardContent>
+            </Card>
+          )}
         <Tabs defaultValue="one-off">
           <TabsList className="grid grid-cols-2 w-full">
             <TabsTrigger value="one-off">One-off</TabsTrigger>

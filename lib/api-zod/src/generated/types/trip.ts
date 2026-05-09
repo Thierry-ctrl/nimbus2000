@@ -5,6 +5,7 @@
  * KigaliWeShare API — neighbor-to-neighbor carpool matching for Kigali commuters
  * OpenAPI spec version: 0.1.0
  */
+import type { FeeBreakdown } from "./feeBreakdown";
 import type { FuelShare } from "./fuelShare";
 import type { TripFlexMinutes } from "./tripFlexMinutes";
 import type { TripStatus } from "./tripStatus";
@@ -32,4 +33,10 @@ export interface Trip {
   status: TripStatus;
   cancelReason?: string | null;
   fuelShare?: FuelShare | null;
+  /** Per-rider platform service fee snapshot, computed at trip-post time.
+Only populated when serviceFeeEnabled is true. NEVER summed with the
+fuel share — the two amounts must be displayed as separate line items.
+ */
+  serviceFeePerRider?: number | null;
+  feeBreakdown?: FeeBreakdown | null;
 }

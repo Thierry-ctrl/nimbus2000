@@ -9,8 +9,31 @@ import {
   corridors,
 } from "@workspace/db";
 import { and, avg, count, eq, sql } from "drizzle-orm";
-import { computeFuelShare } from "./fuel-share";
-import { getConfigValue } from "./config";
+import { computeFuelShare, calculateServiceFee } from "./fuel-share";
+import { getConfigValue, getServiceFeeConfig } from "./config";
+
+const FEE_DISCLAIMER =
+  "The fuel share goes directly to your driver. The service fee supports KigaliWeShare. We never collect or hold the fuel share.";
+
+/**
+ * Build the rider-facing fee breakdown. Returns null when monetization is
+ * disabled OR the trip is too short to charge. The fuel share and service
+ * fee MUST stay separate fields — totalRiderPaysRwf is shown for transparency
+ * but is NEVER collected as a single charge.
+ */
+function buildFeeBreakdown(
+  perRiderFuelShareRwf: number,
+  serviceFeeRwf: number,
+  feePct: number,
+) {
+  return {
+    fuelShareRwf: Math.round(perRiderFuelShareRwf),
+    serviceFeeRwf,
+    totalRiderPaysRwf: Math.round(perRiderFuelShareRwf) + serviceFeeRwf,
+    feePercentage: feePct,
+    disclaimerText: FEE_DISCLAIMER,
+  };
+}
 
 async function computeTripFuelShare(t: typeof trips.$inferSelect) {
   const [c] = await db
@@ -123,6 +146,28 @@ export async function tripToApi(
   const stats = await getUserStats(t.driverId);
   driverRating = stats.averageRating;
   const fuelShare = await computeTripFuelShare(t);
+
+  // Fee breakdown — only included when monetization is enabled AND the trip
+  // has a non-zero fuel share. When disabled, all fee fields stay null so
+  // the response is byte-for-byte equivalent to the pre-monetization shape.
+  const feeCfg = await getServiceFeeConfig();
+  let serviceFeePerRider: number | null = null;
+  let feeBreakdown: ReturnType<typeof buildFeeBreakdown> | null = null;
+  if (feeCfg.enabled && fuelShare && fuelShare.perPassengerRwf > 0) {
+    const fee =
+      t.serviceFeePerRider ??
+      calculateServiceFee(
+        fuelShare.perPassengerRwf,
+        fuelShare.distanceKm,
+        feeCfg,
+      );
+    serviceFeePerRider = fee;
+    feeBreakdown =
+      fee > 0
+        ? buildFeeBreakdown(fuelShare.perPassengerRwf, fee, feeCfg.pct)
+        : null;
+  }
+
   return {
     id: t.id,
     driverId: t.driverId,
@@ -144,6 +189,8 @@ export async function tripToApi(
     status: t.status,
     cancelReason: t.cancelReason,
     fuelShare,
+    serviceFeePerRider,
+    feeBreakdown,
   };
 }
 
@@ -165,10 +212,28 @@ export async function rideRequestToApi(
     riderNeighborhood = n?.name ?? null;
   }
   let trip = null;
+  let feeBreakdown: ReturnType<typeof buildFeeBreakdown> | null = null;
   if (opts.includeTrip) {
     const [t] = await db.select().from(trips).where(eq(trips.id, r.tripId));
     if (t) trip = await tripToApi(t);
   }
+
+  // Per-request fee breakdown (only when monetization on AND fee is non-zero).
+  const feeCfg = await getServiceFeeConfig();
+  if (feeCfg.enabled && r.serviceFeeAmount > 0) {
+    const [t] = await db.select().from(trips).where(eq(trips.id, r.tripId));
+    if (t) {
+      const share = await computeTripFuelShare(t);
+      if (share && share.perPassengerRwf > 0) {
+        feeBreakdown = buildFeeBreakdown(
+          share.perPassengerRwf,
+          r.serviceFeeAmount,
+          feeCfg.pct,
+        );
+      }
+    }
+  }
+
   return {
     id: r.id,
     tripId: r.tripId,
@@ -182,6 +247,9 @@ export async function rideRequestToApi(
     notes: r.notes,
     status: r.status,
     createdAt: r.createdAt.toISOString(),
+    serviceFeeAmount: feeCfg.enabled ? r.serviceFeeAmount : null,
+    serviceFeeStatus: feeCfg.enabled ? r.serviceFeeStatus : null,
+    feeBreakdown,
     trip,
   };
 }

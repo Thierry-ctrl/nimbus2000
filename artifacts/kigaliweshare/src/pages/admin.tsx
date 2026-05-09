@@ -17,7 +17,9 @@ import {
   useListAdminReports,
   useUpdateAdminReport,
   useGetInviteAnalytics,
+  useGetRevenueStats,
   useSetUserIdVerified,
+  getGetRevenueStatsQueryKey,
   getExportUsersCsvUrl,
   getExportTripsCsvUrl,
   getGetAdminStatsQueryKey,
@@ -73,6 +75,14 @@ function AdminConsole() {
   const { data: cfg } = useGetPublicConfig();
   const { data: inviteAnalytics } = useGetInviteAnalytics();
   const { data: reports = [] } = useListAdminReports({ status: "open" });
+  // Only fetch revenue when monetization is enabled — keeps the admin tab
+  // empty/hidden during pre-monetization pilot.
+  const { data: revenue } = useGetRevenueStats({
+    query: {
+      enabled: cfg?.serviceFeeEnabled ?? false,
+      queryKey: getGetRevenueStatsQueryKey(),
+    },
+  });
   const verify = useVerifyUser();
   const setIdVerified = useSetUserIdVerified();
   const updateReport = useUpdateAdminReport();
@@ -97,7 +107,9 @@ function AdminConsole() {
         <h2 className="text-2xl font-serif font-bold">Pilot console</h2>
 
         <Tabs defaultValue="stats">
-          <TabsList className="grid grid-cols-6 w-full">
+          <TabsList
+            className={`grid w-full ${cfg?.serviceFeeEnabled ? "grid-cols-7" : "grid-cols-6"}`}
+          >
             <TabsTrigger value="stats" className="text-xs px-1">Stats</TabsTrigger>
             <TabsTrigger value="users" className="text-xs px-1">Users</TabsTrigger>
             <TabsTrigger value="reports" className="text-xs px-1">
@@ -106,6 +118,11 @@ function AdminConsole() {
             <TabsTrigger value="invites" className="text-xs px-1">Invites</TabsTrigger>
             <TabsTrigger value="places" className="text-xs px-1">Places</TabsTrigger>
             <TabsTrigger value="config" className="text-xs px-1">Config</TabsTrigger>
+            {cfg?.serviceFeeEnabled && (
+              <TabsTrigger value="revenue" className="text-xs px-1">
+                Revenue
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="stats" className="space-y-3 mt-3">
@@ -520,6 +537,78 @@ function AdminConsole() {
           <TabsContent value="places" className="space-y-3 mt-3">
             <PlacesAdmin />
           </TabsContent>
+
+          {cfg?.serviceFeeEnabled && (
+            <TabsContent value="revenue" className="space-y-3 mt-3">
+              <div className="grid grid-cols-2 gap-3">
+                <Stat
+                  label="Today"
+                  value={formatRwf(revenue?.todayRwf ?? 0)}
+                />
+                <Stat
+                  label="This week"
+                  value={formatRwf(revenue?.weekRwf ?? 0)}
+                />
+                <Stat
+                  label="This month"
+                  value={formatRwf(revenue?.monthRwf ?? 0)}
+                />
+                <Stat
+                  label="All time"
+                  value={formatRwf(revenue?.totalCollectedRwf ?? 0)}
+                />
+                <Stat
+                  label="Success rate"
+                  value={`${revenue?.paymentSuccessRatePct ?? 0}%`}
+                />
+                <Stat
+                  label="Avg fee"
+                  value={formatRwf(revenue?.averageFeeRwf ?? 0)}
+                />
+                <Stat
+                  label="Pending"
+                  value={revenue?.pendingPayments ?? 0}
+                />
+                <Stat
+                  label="Failed"
+                  value={revenue?.failedPayments ?? 0}
+                />
+              </div>
+              {revenue?.refundsIssuedRwf ? (
+                <Card>
+                  <CardContent className="py-3 text-sm">
+                    Refunds issued:{" "}
+                    <span className="font-semibold">
+                      {formatRwf(revenue.refundsIssuedRwf)}
+                    </span>
+                  </CardContent>
+                </Card>
+              ) : null}
+              {(revenue?.byCorridor?.length ?? 0) > 0 && (
+                <Card>
+                  <CardContent className="py-4 space-y-2">
+                    <div className="font-semibold text-sm">
+                      Revenue by corridor
+                    </div>
+                    {revenue!.byCorridor.map((r) => (
+                      <div
+                        key={r.corridorLabel}
+                        className="flex justify-between text-sm"
+                      >
+                        <span>{r.corridorLabel}</span>
+                        <span className="font-medium">
+                          {formatRwf(r.revenueRwf)}{" "}
+                          <span className="text-muted-foreground">
+                            ({r.rides})
+                          </span>
+                        </span>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </AppLayout>

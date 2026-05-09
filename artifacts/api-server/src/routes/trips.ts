@@ -17,6 +17,8 @@ import {
   rideRequestToApi,
   getUserStats,
 } from "../lib/serializers";
+import { computeFuelShare, calculateServiceFee } from "../lib/fuel-share";
+import { getConfigValue, getServiceFeeConfig } from "../lib/config";
 
 const router: IRouter = Router();
 
@@ -73,6 +75,49 @@ router.post("/trips", requireAuth, async (req, res) => {
     typeof b.pickupPoint === "string" && b.pickupPoint.trim()
       ? b.pickupPoint.trim()
       : null;
+  // Snapshot the per-rider service fee at post-time so a later config change
+  // doesn't retroactively alter quoted prices. Fuel share is NEVER stored here
+  // — it is recomputed at read-time from current corridor/fuel config.
+  let serviceFeePerRider: number | null = null;
+  const feeCfg = await getServiceFeeConfig();
+  if (feeCfg.enabled) {
+    const [corridor] = await db
+      .select()
+      .from(corridors)
+      .where(
+        and(
+          eq(corridors.originId, b.originId),
+          eq(corridors.destinationId, b.destinationId),
+        ),
+      );
+    if (corridor) {
+      const [v] = await db
+        .select()
+        .from(vehicles)
+        .where(eq(vehicles.userId, userId));
+      const cons =
+        v?.consumptionLPer100Km !== null && v?.consumptionLPer100Km !== undefined
+          ? Number(v.consumptionLPer100Km)
+          : await getConfigValue("vehicleConsumptionLPer100Km");
+      const price =
+        v?.fuelType === "diesel"
+          ? await getConfigValue("dieselPriceRwfPerLitre")
+          : await getConfigValue("fuelPriceRwfPerLitre");
+      const share = computeFuelShare({
+        distanceKm: Number(corridor.distanceKm),
+        consumptionLPer100Km: cons,
+        pricePerLitreRwf: price,
+        numPassengers: 0,
+        seatsTotal: seats,
+      });
+      serviceFeePerRider = calculateServiceFee(
+        share.perPassengerRwf,
+        share.distanceKm,
+        feeCfg,
+      );
+    }
+  }
+
   const [inserted] = await db
     .insert(trips)
     .values({
@@ -88,6 +133,7 @@ router.post("/trips", requireAuth, async (req, res) => {
       seatsRemaining: seats,
       sameGenderOnly: !!b.sameGenderOnly,
       notes: b.notes ?? null,
+      serviceFeePerRider,
     })
     .returning();
   const dto = await tripToApi(inserted);

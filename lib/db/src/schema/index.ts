@@ -55,6 +55,26 @@ export const reportStatusEnum = pgEnum("report_status", [
 
 export const languageEnum = pgEnum("language", ["en", "fr", "rw"]);
 
+export const paymentMethodEnum = pgEnum("payment_method", [
+  "momo_mtn",
+  "momo_airtel",
+  "cash_fee",
+]);
+
+export const feeStatusEnum = pgEnum("fee_status", [
+  "unpaid",
+  "paid",
+  "waived",
+  "refunded",
+]);
+
+export const momoStatusEnum = pgEnum("momo_status", [
+  "pending",
+  "success",
+  "failed",
+  "refunded",
+]);
+
 export const neighborhoods = pgTable("neighborhoods", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull().unique(),
@@ -159,6 +179,10 @@ export const trips = pgTable(
     status: tripStatusEnum("status").notNull().default("scheduled"),
     cancelReason: text("cancel_reason"),
     recurringId: uuid("recurring_id"),
+    // Per-rider service fee snapshot, computed at trip-post time. Nullable so
+    // pre-monetization trips remain unaffected. Always shown as a SEPARATE
+    // line item from the fuel share — never combined.
+    serviceFeePerRider: integer("service_fee_per_rider"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -205,6 +229,12 @@ export const rideRequests = pgTable(
     pickupPoint: text("pickup_point"),
     notes: text("notes"),
     status: requestStatusEnum("status").notNull().default("pending"),
+    // Service fee tracking. Approval (status -> approved) MUST remain atomic
+    // and must NOT be conditional on serviceFeeStatus reaching 'paid'.
+    serviceFeeAmount: integer("service_fee_amount").notNull().default(0),
+    serviceFeeStatus: feeStatusEnum("service_fee_status")
+      .notNull()
+      .default("unpaid"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -212,6 +242,47 @@ export const rideRequests = pgTable(
   (t) => [
     uniqueIndex("ride_requests_unique_idx").on(t.tripId, t.riderId),
     index("ride_requests_rider_idx").on(t.riderId),
+  ],
+);
+
+// On-platform fee transactions. The fuel share is NOT recorded here — it
+// flows directly between rider and driver off-platform. This table only
+// tracks the platform service fee paid to KigaliWeShare.
+export const serviceFees = pgTable(
+  "service_fees",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    rideRequestId: uuid("ride_request_id")
+      .notNull()
+      .references(() => rideRequests.id, { onDelete: "cascade" }),
+    riderId: text("rider_id")
+      .notNull()
+      .references(() => profiles.userId),
+    amount: integer("amount").notNull(),
+    feePct: integer("fee_pct").notNull(),
+    baseFuelShare: integer("base_fuel_share").notNull(),
+    momoTransactionId: text("momo_transaction_id"),
+    momoReferenceId: text("momo_reference_id"),
+    momoStatus: momoStatusEnum("momo_status").notNull().default("pending"),
+    paymentMethod: paymentMethodEnum("payment_method").notNull(),
+    failureReason: text("failure_reason"),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    refundedAt: timestamp("refunded_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("service_fees_request_idx").on(t.rideRequestId),
+    index("service_fees_rider_idx").on(t.riderId),
+    index("service_fees_status_idx").on(t.momoStatus),
+    uniqueIndex("service_fees_momo_ref_idx").on(t.momoReferenceId),
   ],
 );
 
@@ -324,3 +395,4 @@ export type RecurringTrip = typeof recurringTrips.$inferSelect;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 export type UserReport = typeof userReports.$inferSelect;
 export type RatingDismissal = typeof ratingDismissals.$inferSelect;
+export type ServiceFee = typeof serviceFees.$inferSelect;

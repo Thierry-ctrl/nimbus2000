@@ -69,13 +69,15 @@ a friendly chip-in that can never exceed an equal split.
 
 | Layer | Tech |
 |---|---|
-| Frontend | React + Vite + Tailwind + shadcn/ui, wouter routing |
-| Auth | Clerk (Replit-managed) |
+| Frontend | React 19 + Vite + Tailwind v4 + shadcn/ui, wouter routing |
+| Auth | Clerk |
 | API | Express + Drizzle ORM + Zod (OpenAPI-driven) |
-| DB | Postgres (Replit-managed) |
-| Codegen | orval → `@workspace/api-client-react`, `@workspace/zod` |
+| DB | Postgres 16 |
+| Codegen | orval → `@workspace/api-client-react`, `@workspace/api-zod` |
 | Push | `web-push` + VAPID |
 | Email | `nodemailer` (optional) |
+| Payments | MTN MoMo Collections API (gated by `serviceFeeEnabled` config) |
+| Deploy | Docker Compose (Postgres + API + nginx) |
 
 Monorepo managed by **pnpm** workspaces. Each artifact (`api-server`, `kigaliweshare`, `mockup-sandbox`) has its own dev workflow.
 
@@ -137,26 +139,56 @@ If RURA later issues guidance on ride-sharing platforms, the calculator can be d
 
 ---
 
+## Payment architecture
+
+KigaliWeShare uses a **two-transaction model**:
+
+1. **Fuel share** flows directly from rider to driver, **off-platform**. The app surfaces a suggested amount; the rider sends MoMo P2P or hands over cash. The platform never sees, holds, or routes this money. This keeps KigaliWeShare outside BNR Regulation N° 74/2023 (Payment Service Provider licensing).
+2. **Service fee** (rider → KigaliWeShare, **on-platform**) is collected via the [MTN MoMo Collections API](https://momodeveloper.mtn.com). This is the platform's only revenue.
+
+The two amounts are **never combined** into a single charge or rendered as a single "total" anywhere in the API or UI. Riders see two distinct line items: "Fuel share — paid to driver" and "Service fee — paid to KigaliWeShare". This is a hard architectural rule, not a UI choice — see `CONTRIBUTING.md` §Architectural rules.
+
+The full monetization roadmap, license/registration checklist, and rollout plan live in [`KigaliWeShare_Monetization_Plan.md`](KigaliWeShare_Monetization_Plan.md).
+
+---
+
+## Configuration (`platformConfig` keys)
+
+Stored in the `config` table; mutable at runtime via the admin Config tab. Numbers are stored as strings and coerced.
+
+| Key | Default | What it does |
+|---|---|---|
+| `fuelPriceRwfPerLitre` | `2938` | Petrol price used by the fuel-share calculator |
+| `dieselPriceRwfPerLitre` | `2205` | Diesel price (per `vehicles.fuelType`) |
+| `vehicleConsumptionLPer100Km` | `8` | Default consumption when a driver hasn't filled it on their vehicle |
+| `serviceFeeEnabled` | `false` | **Kill switch**. While `false`, the entire fee surface area is hidden (no fee fields in API responses, no fee UI). Required for backward compatibility during pre-monetization pilot. |
+| `serviceFeePct` | `25` | Percentage of the per-rider fuel share charged as service fee |
+| `serviceFeeMinRwf` | `50` | Floor — fees below this are bumped up |
+| `serviceFeeMaxRwf` | `5000` | Cap — fees above this are clamped down |
+| `serviceFeeFreeKm` | `3` | No fee for trips shorter than this distance |
+
+---
+
 ## Repo map
 
 ```
 artifacts/
   api-server/         # Express API
     src/
-      routes/         # trips, requests, invites, profile, admin, reports, notifications
-      lib/            # auth, db, notify, fuel-share, serializers
+      routes/         # trips, requests, invites, profile, admin, reports, notifications, payments
+      lib/            # auth, db, notify, fuel-share, serializers, momo
   kigaliweshare/      # PWA frontend
     src/
       pages/          # find, post-trip, trip-detail, dashboard, profile, admin, my-*
-      components/     # SOSButton, ReportUserDialog, PwaBootstrap, AppLayout
+      components/     # SOSButton, ReportUserDialog, PwaBootstrap, AppLayout, MoMoPaymentFlow
       lib/            # auth-utils, format, api client wiring
     public/           # manifest.webmanifest, service-worker.ts, icons
   mockup-sandbox/     # component preview server (canvas iframes)
 lib/
   api-spec/           # openapi.yaml + orval config
   api-client-react/   # generated react-query hooks
-  db/                 # drizzle schema + migrations
-  zod/                # generated zod schemas
+  api-zod/            # generated zod schemas
+  db/                 # drizzle schema
 ```
 
 ---

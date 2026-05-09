@@ -60,6 +60,14 @@ export const GetPublicConfigResponse = zod.object({
   currencyCode: zod.string().describe("e.g. RWF"),
   rnpEmergencyNumber: zod.string().optional(),
   vapidPublicKey: zod.string().optional(),
+  serviceFeeEnabled: zod
+    .boolean()
+    .describe(
+      "Kill switch for the platform service fee. When false, clients MUST\nhide all fee UI and treat fee fields as absent. Backward-compatible\nwith pre-monetization clients.\n",
+    ),
+  serviceFeePct: zod
+    .number()
+    .describe("Percentage applied to the per-rider fuel share"),
 });
 
 /**
@@ -298,6 +306,40 @@ export const ListMyTripsResponseItem = zod.object({
       zod.null(),
     ])
     .optional(),
+  serviceFeePerRider: zod
+    .number()
+    .nullish()
+    .describe(
+      "Per-rider platform service fee snapshot, computed at trip-post time.\nOnly populated when serviceFeeEnabled is true. NEVER summed with the\nfuel share — the two amounts must be displayed as separate line items.\n",
+    ),
+  feeBreakdown: zod
+    .union([
+      zod
+        .object({
+          fuelShareRwf: zod
+            .number()
+            .describe(
+              "Per-rider fuel share (paid directly to driver, off-platform)",
+            ),
+          serviceFeeRwf: zod
+            .number()
+            .describe(
+              "Per-rider service fee (paid to KigaliWeShare, on-platform)",
+            ),
+          totalRiderPaysRwf: zod
+            .number()
+            .describe(
+              "Sum shown for transparency only — NOT collected as a single charge",
+            ),
+          feePercentage: zod.number(),
+          disclaimerText: zod.string(),
+        })
+        .describe(
+          "Cost breakdown shown to riders. The fuel share and service fee MUST be\ndisplayed as separate visual blocks — never summed into a single price.\nThis is the regulatory boundary between cost-sharing (off-platform) and\nplatform service (on-platform).\n",
+        ),
+      zod.null(),
+    ])
+    .optional(),
 });
 export const ListMyTripsResponse = zod.array(ListMyTripsResponseItem);
 
@@ -380,6 +422,40 @@ export const GetTripResponse = zod
         zod.null(),
       ])
       .optional(),
+    serviceFeePerRider: zod
+      .number()
+      .nullish()
+      .describe(
+        "Per-rider platform service fee snapshot, computed at trip-post time.\nOnly populated when serviceFeeEnabled is true. NEVER summed with the\nfuel share — the two amounts must be displayed as separate line items.\n",
+      ),
+    feeBreakdown: zod
+      .union([
+        zod
+          .object({
+            fuelShareRwf: zod
+              .number()
+              .describe(
+                "Per-rider fuel share (paid directly to driver, off-platform)",
+              ),
+            serviceFeeRwf: zod
+              .number()
+              .describe(
+                "Per-rider service fee (paid to KigaliWeShare, on-platform)",
+              ),
+            totalRiderPaysRwf: zod
+              .number()
+              .describe(
+                "Sum shown for transparency only — NOT collected as a single charge",
+              ),
+            feePercentage: zod.number(),
+            disclaimerText: zod.string(),
+          })
+          .describe(
+            "Cost breakdown shown to riders. The fuel share and service fee MUST be\ndisplayed as separate visual blocks — never summed into a single price.\nThis is the regulatory boundary between cost-sharing (off-platform) and\nplatform service (on-platform).\n",
+          ),
+        zod.null(),
+      ])
+      .optional(),
   })
   .and(
     zod.object({
@@ -433,6 +509,46 @@ export const GetTripResponse = zod
               "completed",
             ]),
             createdAt: zod.coerce.date(),
+            serviceFeeAmount: zod
+              .number()
+              .nullish()
+              .describe(
+                "Service fee owed by this rider (omitted when serviceFeeEnabled is false)",
+              ),
+            serviceFeeStatus: zod
+              .union([
+                zod.enum(["unpaid", "paid", "waived", "refunded"]),
+                zod.null(),
+              ])
+              .optional(),
+            feeBreakdown: zod
+              .union([
+                zod
+                  .object({
+                    fuelShareRwf: zod
+                      .number()
+                      .describe(
+                        "Per-rider fuel share (paid directly to driver, off-platform)",
+                      ),
+                    serviceFeeRwf: zod
+                      .number()
+                      .describe(
+                        "Per-rider service fee (paid to KigaliWeShare, on-platform)",
+                      ),
+                    totalRiderPaysRwf: zod
+                      .number()
+                      .describe(
+                        "Sum shown for transparency only — NOT collected as a single charge",
+                      ),
+                    feePercentage: zod.number(),
+                    disclaimerText: zod.string(),
+                  })
+                  .describe(
+                    "Cost breakdown shown to riders. The fuel share and service fee MUST be\ndisplayed as separate visual blocks — never summed into a single price.\nThis is the regulatory boundary between cost-sharing (off-platform) and\nplatform service (on-platform).\n",
+                  ),
+                zod.null(),
+              ])
+              .optional(),
             trip: zod
               .union([
                 zod.object({
@@ -491,6 +607,40 @@ export const GetTripResponse = zod
                         })
                         .describe(
                           "Suggested fuel cost-share for the trip. KigaliWeShare does not process payments;\nriders pay drivers directly (MoMo \/ cash). Per-rider amount can never exceed an\nequal split, ensuring this stays a non-commercial cost-share.\n",
+                        ),
+                      zod.null(),
+                    ])
+                    .optional(),
+                  serviceFeePerRider: zod
+                    .number()
+                    .nullish()
+                    .describe(
+                      "Per-rider platform service fee snapshot, computed at trip-post time.\nOnly populated when serviceFeeEnabled is true. NEVER summed with the\nfuel share — the two amounts must be displayed as separate line items.\n",
+                    ),
+                  feeBreakdown: zod
+                    .union([
+                      zod
+                        .object({
+                          fuelShareRwf: zod
+                            .number()
+                            .describe(
+                              "Per-rider fuel share (paid directly to driver, off-platform)",
+                            ),
+                          serviceFeeRwf: zod
+                            .number()
+                            .describe(
+                              "Per-rider service fee (paid to KigaliWeShare, on-platform)",
+                            ),
+                          totalRiderPaysRwf: zod
+                            .number()
+                            .describe(
+                              "Sum shown for transparency only — NOT collected as a single charge",
+                            ),
+                          feePercentage: zod.number(),
+                          disclaimerText: zod.string(),
+                        })
+                        .describe(
+                          "Cost breakdown shown to riders. The fuel share and service fee MUST be\ndisplayed as separate visual blocks — never summed into a single price.\nThis is the regulatory boundary between cost-sharing (off-platform) and\nplatform service (on-platform).\n",
                         ),
                       zod.null(),
                     ])
@@ -557,6 +707,40 @@ export const CancelTripResponse = zod.object({
       zod.null(),
     ])
     .optional(),
+  serviceFeePerRider: zod
+    .number()
+    .nullish()
+    .describe(
+      "Per-rider platform service fee snapshot, computed at trip-post time.\nOnly populated when serviceFeeEnabled is true. NEVER summed with the\nfuel share — the two amounts must be displayed as separate line items.\n",
+    ),
+  feeBreakdown: zod
+    .union([
+      zod
+        .object({
+          fuelShareRwf: zod
+            .number()
+            .describe(
+              "Per-rider fuel share (paid directly to driver, off-platform)",
+            ),
+          serviceFeeRwf: zod
+            .number()
+            .describe(
+              "Per-rider service fee (paid to KigaliWeShare, on-platform)",
+            ),
+          totalRiderPaysRwf: zod
+            .number()
+            .describe(
+              "Sum shown for transparency only — NOT collected as a single charge",
+            ),
+          feePercentage: zod.number(),
+          disclaimerText: zod.string(),
+        })
+        .describe(
+          "Cost breakdown shown to riders. The fuel share and service fee MUST be\ndisplayed as separate visual blocks — never summed into a single price.\nThis is the regulatory boundary between cost-sharing (off-platform) and\nplatform service (on-platform).\n",
+        ),
+      zod.null(),
+    ])
+    .optional(),
 });
 
 export const StartTripParams = zod.object({
@@ -607,6 +791,40 @@ export const StartTripResponse = zod.object({
       zod.null(),
     ])
     .optional(),
+  serviceFeePerRider: zod
+    .number()
+    .nullish()
+    .describe(
+      "Per-rider platform service fee snapshot, computed at trip-post time.\nOnly populated when serviceFeeEnabled is true. NEVER summed with the\nfuel share — the two amounts must be displayed as separate line items.\n",
+    ),
+  feeBreakdown: zod
+    .union([
+      zod
+        .object({
+          fuelShareRwf: zod
+            .number()
+            .describe(
+              "Per-rider fuel share (paid directly to driver, off-platform)",
+            ),
+          serviceFeeRwf: zod
+            .number()
+            .describe(
+              "Per-rider service fee (paid to KigaliWeShare, on-platform)",
+            ),
+          totalRiderPaysRwf: zod
+            .number()
+            .describe(
+              "Sum shown for transparency only — NOT collected as a single charge",
+            ),
+          feePercentage: zod.number(),
+          disclaimerText: zod.string(),
+        })
+        .describe(
+          "Cost breakdown shown to riders. The fuel share and service fee MUST be\ndisplayed as separate visual blocks — never summed into a single price.\nThis is the regulatory boundary between cost-sharing (off-platform) and\nplatform service (on-platform).\n",
+        ),
+      zod.null(),
+    ])
+    .optional(),
 });
 
 export const CompleteTripParams = zod.object({
@@ -653,6 +871,40 @@ export const CompleteTripResponse = zod.object({
         })
         .describe(
           "Suggested fuel cost-share for the trip. KigaliWeShare does not process payments;\nriders pay drivers directly (MoMo \/ cash). Per-rider amount can never exceed an\nequal split, ensuring this stays a non-commercial cost-share.\n",
+        ),
+      zod.null(),
+    ])
+    .optional(),
+  serviceFeePerRider: zod
+    .number()
+    .nullish()
+    .describe(
+      "Per-rider platform service fee snapshot, computed at trip-post time.\nOnly populated when serviceFeeEnabled is true. NEVER summed with the\nfuel share — the two amounts must be displayed as separate line items.\n",
+    ),
+  feeBreakdown: zod
+    .union([
+      zod
+        .object({
+          fuelShareRwf: zod
+            .number()
+            .describe(
+              "Per-rider fuel share (paid directly to driver, off-platform)",
+            ),
+          serviceFeeRwf: zod
+            .number()
+            .describe(
+              "Per-rider service fee (paid to KigaliWeShare, on-platform)",
+            ),
+          totalRiderPaysRwf: zod
+            .number()
+            .describe(
+              "Sum shown for transparency only — NOT collected as a single charge",
+            ),
+          feePercentage: zod.number(),
+          disclaimerText: zod.string(),
+        })
+        .describe(
+          "Cost breakdown shown to riders. The fuel share and service fee MUST be\ndisplayed as separate visual blocks — never summed into a single price.\nThis is the regulatory boundary between cost-sharing (off-platform) and\nplatform service (on-platform).\n",
         ),
       zod.null(),
     ])
@@ -793,6 +1045,40 @@ export const FindMatchesResponse = zod.object({
             zod.null(),
           ])
           .optional(),
+        serviceFeePerRider: zod
+          .number()
+          .nullish()
+          .describe(
+            "Per-rider platform service fee snapshot, computed at trip-post time.\nOnly populated when serviceFeeEnabled is true. NEVER summed with the\nfuel share — the two amounts must be displayed as separate line items.\n",
+          ),
+        feeBreakdown: zod
+          .union([
+            zod
+              .object({
+                fuelShareRwf: zod
+                  .number()
+                  .describe(
+                    "Per-rider fuel share (paid directly to driver, off-platform)",
+                  ),
+                serviceFeeRwf: zod
+                  .number()
+                  .describe(
+                    "Per-rider service fee (paid to KigaliWeShare, on-platform)",
+                  ),
+                totalRiderPaysRwf: zod
+                  .number()
+                  .describe(
+                    "Sum shown for transparency only — NOT collected as a single charge",
+                  ),
+                feePercentage: zod.number(),
+                disclaimerText: zod.string(),
+              })
+              .describe(
+                "Cost breakdown shown to riders. The fuel share and service fee MUST be\ndisplayed as separate visual blocks — never summed into a single price.\nThis is the regulatory boundary between cost-sharing (off-platform) and\nplatform service (on-platform).\n",
+              ),
+            zod.null(),
+          ])
+          .optional(),
       }),
       matchScore: zod.number().describe("0-100"),
       timeOverlapMinutes: zod.number(),
@@ -858,6 +1144,40 @@ export const FindMatchesResponse = zod.object({
               zod.null(),
             ])
             .optional(),
+          serviceFeePerRider: zod
+            .number()
+            .nullish()
+            .describe(
+              "Per-rider platform service fee snapshot, computed at trip-post time.\nOnly populated when serviceFeeEnabled is true. NEVER summed with the\nfuel share — the two amounts must be displayed as separate line items.\n",
+            ),
+          feeBreakdown: zod
+            .union([
+              zod
+                .object({
+                  fuelShareRwf: zod
+                    .number()
+                    .describe(
+                      "Per-rider fuel share (paid directly to driver, off-platform)",
+                    ),
+                  serviceFeeRwf: zod
+                    .number()
+                    .describe(
+                      "Per-rider service fee (paid to KigaliWeShare, on-platform)",
+                    ),
+                  totalRiderPaysRwf: zod
+                    .number()
+                    .describe(
+                      "Sum shown for transparency only — NOT collected as a single charge",
+                    ),
+                  feePercentage: zod.number(),
+                  disclaimerText: zod.string(),
+                })
+                .describe(
+                  "Cost breakdown shown to riders. The fuel share and service fee MUST be\ndisplayed as separate visual blocks — never summed into a single price.\nThis is the regulatory boundary between cost-sharing (off-platform) and\nplatform service (on-platform).\n",
+                ),
+              zod.null(),
+            ])
+            .optional(),
         }),
         timeOverlapMinutes: zod.number(),
         proximityKm: zod
@@ -905,6 +1225,43 @@ export const ListMyRideRequestsResponseItem = zod.object({
     "completed",
   ]),
   createdAt: zod.coerce.date(),
+  serviceFeeAmount: zod
+    .number()
+    .nullish()
+    .describe(
+      "Service fee owed by this rider (omitted when serviceFeeEnabled is false)",
+    ),
+  serviceFeeStatus: zod
+    .union([zod.enum(["unpaid", "paid", "waived", "refunded"]), zod.null()])
+    .optional(),
+  feeBreakdown: zod
+    .union([
+      zod
+        .object({
+          fuelShareRwf: zod
+            .number()
+            .describe(
+              "Per-rider fuel share (paid directly to driver, off-platform)",
+            ),
+          serviceFeeRwf: zod
+            .number()
+            .describe(
+              "Per-rider service fee (paid to KigaliWeShare, on-platform)",
+            ),
+          totalRiderPaysRwf: zod
+            .number()
+            .describe(
+              "Sum shown for transparency only — NOT collected as a single charge",
+            ),
+          feePercentage: zod.number(),
+          disclaimerText: zod.string(),
+        })
+        .describe(
+          "Cost breakdown shown to riders. The fuel share and service fee MUST be\ndisplayed as separate visual blocks — never summed into a single price.\nThis is the regulatory boundary between cost-sharing (off-platform) and\nplatform service (on-platform).\n",
+        ),
+      zod.null(),
+    ])
+    .optional(),
   trip: zod
     .union([
       zod.object({
@@ -960,6 +1317,40 @@ export const ListMyRideRequestsResponseItem = zod.object({
               })
               .describe(
                 "Suggested fuel cost-share for the trip. KigaliWeShare does not process payments;\nriders pay drivers directly (MoMo \/ cash). Per-rider amount can never exceed an\nequal split, ensuring this stays a non-commercial cost-share.\n",
+              ),
+            zod.null(),
+          ])
+          .optional(),
+        serviceFeePerRider: zod
+          .number()
+          .nullish()
+          .describe(
+            "Per-rider platform service fee snapshot, computed at trip-post time.\nOnly populated when serviceFeeEnabled is true. NEVER summed with the\nfuel share — the two amounts must be displayed as separate line items.\n",
+          ),
+        feeBreakdown: zod
+          .union([
+            zod
+              .object({
+                fuelShareRwf: zod
+                  .number()
+                  .describe(
+                    "Per-rider fuel share (paid directly to driver, off-platform)",
+                  ),
+                serviceFeeRwf: zod
+                  .number()
+                  .describe(
+                    "Per-rider service fee (paid to KigaliWeShare, on-platform)",
+                  ),
+                totalRiderPaysRwf: zod
+                  .number()
+                  .describe(
+                    "Sum shown for transparency only — NOT collected as a single charge",
+                  ),
+                feePercentage: zod.number(),
+                disclaimerText: zod.string(),
+              })
+              .describe(
+                "Cost breakdown shown to riders. The fuel share and service fee MUST be\ndisplayed as separate visual blocks — never summed into a single price.\nThis is the regulatory boundary between cost-sharing (off-platform) and\nplatform service (on-platform).\n",
               ),
             zod.null(),
           ])
@@ -1007,6 +1398,43 @@ export const ApproveRideRequestResponse = zod.object({
     "completed",
   ]),
   createdAt: zod.coerce.date(),
+  serviceFeeAmount: zod
+    .number()
+    .nullish()
+    .describe(
+      "Service fee owed by this rider (omitted when serviceFeeEnabled is false)",
+    ),
+  serviceFeeStatus: zod
+    .union([zod.enum(["unpaid", "paid", "waived", "refunded"]), zod.null()])
+    .optional(),
+  feeBreakdown: zod
+    .union([
+      zod
+        .object({
+          fuelShareRwf: zod
+            .number()
+            .describe(
+              "Per-rider fuel share (paid directly to driver, off-platform)",
+            ),
+          serviceFeeRwf: zod
+            .number()
+            .describe(
+              "Per-rider service fee (paid to KigaliWeShare, on-platform)",
+            ),
+          totalRiderPaysRwf: zod
+            .number()
+            .describe(
+              "Sum shown for transparency only — NOT collected as a single charge",
+            ),
+          feePercentage: zod.number(),
+          disclaimerText: zod.string(),
+        })
+        .describe(
+          "Cost breakdown shown to riders. The fuel share and service fee MUST be\ndisplayed as separate visual blocks — never summed into a single price.\nThis is the regulatory boundary between cost-sharing (off-platform) and\nplatform service (on-platform).\n",
+        ),
+      zod.null(),
+    ])
+    .optional(),
   trip: zod
     .union([
       zod.object({
@@ -1062,6 +1490,40 @@ export const ApproveRideRequestResponse = zod.object({
               })
               .describe(
                 "Suggested fuel cost-share for the trip. KigaliWeShare does not process payments;\nriders pay drivers directly (MoMo \/ cash). Per-rider amount can never exceed an\nequal split, ensuring this stays a non-commercial cost-share.\n",
+              ),
+            zod.null(),
+          ])
+          .optional(),
+        serviceFeePerRider: zod
+          .number()
+          .nullish()
+          .describe(
+            "Per-rider platform service fee snapshot, computed at trip-post time.\nOnly populated when serviceFeeEnabled is true. NEVER summed with the\nfuel share — the two amounts must be displayed as separate line items.\n",
+          ),
+        feeBreakdown: zod
+          .union([
+            zod
+              .object({
+                fuelShareRwf: zod
+                  .number()
+                  .describe(
+                    "Per-rider fuel share (paid directly to driver, off-platform)",
+                  ),
+                serviceFeeRwf: zod
+                  .number()
+                  .describe(
+                    "Per-rider service fee (paid to KigaliWeShare, on-platform)",
+                  ),
+                totalRiderPaysRwf: zod
+                  .number()
+                  .describe(
+                    "Sum shown for transparency only — NOT collected as a single charge",
+                  ),
+                feePercentage: zod.number(),
+                disclaimerText: zod.string(),
+              })
+              .describe(
+                "Cost breakdown shown to riders. The fuel share and service fee MUST be\ndisplayed as separate visual blocks — never summed into a single price.\nThis is the regulatory boundary between cost-sharing (off-platform) and\nplatform service (on-platform).\n",
               ),
             zod.null(),
           ])
@@ -1097,6 +1559,43 @@ export const DeclineRideRequestResponse = zod.object({
     "completed",
   ]),
   createdAt: zod.coerce.date(),
+  serviceFeeAmount: zod
+    .number()
+    .nullish()
+    .describe(
+      "Service fee owed by this rider (omitted when serviceFeeEnabled is false)",
+    ),
+  serviceFeeStatus: zod
+    .union([zod.enum(["unpaid", "paid", "waived", "refunded"]), zod.null()])
+    .optional(),
+  feeBreakdown: zod
+    .union([
+      zod
+        .object({
+          fuelShareRwf: zod
+            .number()
+            .describe(
+              "Per-rider fuel share (paid directly to driver, off-platform)",
+            ),
+          serviceFeeRwf: zod
+            .number()
+            .describe(
+              "Per-rider service fee (paid to KigaliWeShare, on-platform)",
+            ),
+          totalRiderPaysRwf: zod
+            .number()
+            .describe(
+              "Sum shown for transparency only — NOT collected as a single charge",
+            ),
+          feePercentage: zod.number(),
+          disclaimerText: zod.string(),
+        })
+        .describe(
+          "Cost breakdown shown to riders. The fuel share and service fee MUST be\ndisplayed as separate visual blocks — never summed into a single price.\nThis is the regulatory boundary between cost-sharing (off-platform) and\nplatform service (on-platform).\n",
+        ),
+      zod.null(),
+    ])
+    .optional(),
   trip: zod
     .union([
       zod.object({
@@ -1152,6 +1651,40 @@ export const DeclineRideRequestResponse = zod.object({
               })
               .describe(
                 "Suggested fuel cost-share for the trip. KigaliWeShare does not process payments;\nriders pay drivers directly (MoMo \/ cash). Per-rider amount can never exceed an\nequal split, ensuring this stays a non-commercial cost-share.\n",
+              ),
+            zod.null(),
+          ])
+          .optional(),
+        serviceFeePerRider: zod
+          .number()
+          .nullish()
+          .describe(
+            "Per-rider platform service fee snapshot, computed at trip-post time.\nOnly populated when serviceFeeEnabled is true. NEVER summed with the\nfuel share — the two amounts must be displayed as separate line items.\n",
+          ),
+        feeBreakdown: zod
+          .union([
+            zod
+              .object({
+                fuelShareRwf: zod
+                  .number()
+                  .describe(
+                    "Per-rider fuel share (paid directly to driver, off-platform)",
+                  ),
+                serviceFeeRwf: zod
+                  .number()
+                  .describe(
+                    "Per-rider service fee (paid to KigaliWeShare, on-platform)",
+                  ),
+                totalRiderPaysRwf: zod
+                  .number()
+                  .describe(
+                    "Sum shown for transparency only — NOT collected as a single charge",
+                  ),
+                feePercentage: zod.number(),
+                disclaimerText: zod.string(),
+              })
+              .describe(
+                "Cost breakdown shown to riders. The fuel share and service fee MUST be\ndisplayed as separate visual blocks — never summed into a single price.\nThis is the regulatory boundary between cost-sharing (off-platform) and\nplatform service (on-platform).\n",
               ),
             zod.null(),
           ])
@@ -1187,6 +1720,43 @@ export const CancelRideRequestResponse = zod.object({
     "completed",
   ]),
   createdAt: zod.coerce.date(),
+  serviceFeeAmount: zod
+    .number()
+    .nullish()
+    .describe(
+      "Service fee owed by this rider (omitted when serviceFeeEnabled is false)",
+    ),
+  serviceFeeStatus: zod
+    .union([zod.enum(["unpaid", "paid", "waived", "refunded"]), zod.null()])
+    .optional(),
+  feeBreakdown: zod
+    .union([
+      zod
+        .object({
+          fuelShareRwf: zod
+            .number()
+            .describe(
+              "Per-rider fuel share (paid directly to driver, off-platform)",
+            ),
+          serviceFeeRwf: zod
+            .number()
+            .describe(
+              "Per-rider service fee (paid to KigaliWeShare, on-platform)",
+            ),
+          totalRiderPaysRwf: zod
+            .number()
+            .describe(
+              "Sum shown for transparency only — NOT collected as a single charge",
+            ),
+          feePercentage: zod.number(),
+          disclaimerText: zod.string(),
+        })
+        .describe(
+          "Cost breakdown shown to riders. The fuel share and service fee MUST be\ndisplayed as separate visual blocks — never summed into a single price.\nThis is the regulatory boundary between cost-sharing (off-platform) and\nplatform service (on-platform).\n",
+        ),
+      zod.null(),
+    ])
+    .optional(),
   trip: zod
     .union([
       zod.object({
@@ -1246,6 +1816,40 @@ export const CancelRideRequestResponse = zod.object({
             zod.null(),
           ])
           .optional(),
+        serviceFeePerRider: zod
+          .number()
+          .nullish()
+          .describe(
+            "Per-rider platform service fee snapshot, computed at trip-post time.\nOnly populated when serviceFeeEnabled is true. NEVER summed with the\nfuel share — the two amounts must be displayed as separate line items.\n",
+          ),
+        feeBreakdown: zod
+          .union([
+            zod
+              .object({
+                fuelShareRwf: zod
+                  .number()
+                  .describe(
+                    "Per-rider fuel share (paid directly to driver, off-platform)",
+                  ),
+                serviceFeeRwf: zod
+                  .number()
+                  .describe(
+                    "Per-rider service fee (paid to KigaliWeShare, on-platform)",
+                  ),
+                totalRiderPaysRwf: zod
+                  .number()
+                  .describe(
+                    "Sum shown for transparency only — NOT collected as a single charge",
+                  ),
+                feePercentage: zod.number(),
+                disclaimerText: zod.string(),
+              })
+              .describe(
+                "Cost breakdown shown to riders. The fuel share and service fee MUST be\ndisplayed as separate visual blocks — never summed into a single price.\nThis is the regulatory boundary between cost-sharing (off-platform) and\nplatform service (on-platform).\n",
+              ),
+            zod.null(),
+          ])
+          .optional(),
       }),
       zod.null(),
     ])
@@ -1262,6 +1866,139 @@ export const CreateRatingBody = zod.object({
   toUserId: zod.string(),
   stars: zod.number().min(1).max(createRatingBodyStarsMax),
   comment: zod.string().nullish(),
+});
+
+/**
+ * Triggers a MoMo Collections API RequestToPay against the rider's phone.
+Requires the ride request to be approved. The fuel share is paid OUT
+of band (rider→driver MoMo P2P or cash) and is never touched by this
+endpoint.
+
+ * @summary Start a MoMo Collections RequestToPay for the rider's service fee
+ */
+export const InitiateServiceFeePaymentBody = zod.object({
+  rideRequestId: zod.string(),
+  payerPhone: zod.string().describe("MoMo MSISDN, e.g. 2507XXXXXXXX"),
+  paymentMethod: zod
+    .union([zod.enum(["momo_mtn", "momo_airtel", "cash_fee"]), zod.null()])
+    .optional(),
+});
+
+export const InitiateServiceFeePaymentResponse = zod.object({
+  feeId: zod.string(),
+  momoReferenceId: zod.string(),
+  status: zod.enum(["pending", "success", "failed", "refunded"]),
+  amountRwf: zod.number(),
+});
+
+/**
+ * Called by MTN MoMo to confirm payment success/failure. Validates the
+callback signature before updating fee state.
+
+ * @summary Webhook receiver for MoMo Collections payment status updates
+ */
+export const MomoPaymentCallbackBody = zod
+  .object({
+    referenceId: zod.string(),
+    status: zod.string().describe("MoMo status — SUCCESSFUL, FAILED, etc."),
+    financialTransactionId: zod.string().nullish(),
+    reason: zod.string().nullish(),
+  })
+  .describe("MTN MoMo Collections webhook payload (validated by signature)");
+
+/**
+ * @summary Current payment status for a ride request's service fee
+ */
+export const GetServiceFeeStatusParams = zod.object({
+  rideRequestId: zod.coerce.string(),
+});
+
+export const GetServiceFeeStatusResponse = zod.object({
+  rideRequestId: zod.string(),
+  feeId: zod.string().nullish(),
+  serviceFeeStatus: zod.enum(["unpaid", "paid", "waived", "refunded"]),
+  momoStatus: zod
+    .union([zod.enum(["pending", "success", "failed", "refunded"]), zod.null()])
+    .optional(),
+  paymentMethod: zod
+    .union([zod.enum(["momo_mtn", "momo_airtel", "cash_fee"]), zod.null()])
+    .optional(),
+  amountRwf: zod.number(),
+  failureReason: zod.string().nullish(),
+  paidAt: zod.coerce.date().nullish(),
+});
+
+/**
+ * @summary Mark a service fee as paid via cash fallback when MoMo is unavailable
+ */
+export const RecordCashFeeParams = zod.object({
+  rideRequestId: zod.coerce.string(),
+});
+
+export const RecordCashFeeResponse = zod.object({
+  rideRequestId: zod.string(),
+  feeId: zod.string().nullish(),
+  serviceFeeStatus: zod.enum(["unpaid", "paid", "waived", "refunded"]),
+  momoStatus: zod
+    .union([zod.enum(["pending", "success", "failed", "refunded"]), zod.null()])
+    .optional(),
+  paymentMethod: zod
+    .union([zod.enum(["momo_mtn", "momo_airtel", "cash_fee"]), zod.null()])
+    .optional(),
+  amountRwf: zod.number(),
+  failureReason: zod.string().nullish(),
+  paidAt: zod.coerce.date().nullish(),
+});
+
+/**
+ * @summary Mark a service fee as refunded (admin only)
+ */
+export const RefundServiceFeeParams = zod.object({
+  feeId: zod.coerce.string(),
+});
+
+export const RefundServiceFeeBody = zod.object({
+  reason: zod.string().nullish(),
+});
+
+export const RefundServiceFeeResponse = zod.object({
+  id: zod.string(),
+  tripId: zod.string().optional(),
+  rideRequestId: zod.string(),
+  riderId: zod.string(),
+  amountRwf: zod.number(),
+  feePct: zod.number(),
+  baseFuelShareRwf: zod.number().optional(),
+  momoTransactionId: zod.string().nullish(),
+  momoReferenceId: zod.string().nullish(),
+  momoStatus: zod.enum(["pending", "success", "failed", "refunded"]),
+  paymentMethod: zod.enum(["momo_mtn", "momo_airtel", "cash_fee"]),
+  failureReason: zod.string().nullish(),
+  paidAt: zod.coerce.date().nullish(),
+  refundedAt: zod.coerce.date().nullish(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Aggregated revenue + payment health stats (admin)
+ */
+export const GetRevenueStatsResponse = zod.object({
+  totalCollectedRwf: zod.number(),
+  todayRwf: zod.number(),
+  weekRwf: zod.number(),
+  monthRwf: zod.number(),
+  paymentSuccessRatePct: zod.number(),
+  pendingPayments: zod.number(),
+  failedPayments: zod.number(),
+  refundsIssuedRwf: zod.number(),
+  averageFeeRwf: zod.number(),
+  byCorridor: zod.array(
+    zod.object({
+      corridorLabel: zod.string(),
+      rides: zod.number(),
+      revenueRwf: zod.number(),
+    }),
+  ),
 });
 
 /**
@@ -1335,6 +2072,40 @@ export const GetDashboardSummaryResponse = zod.object({
             zod.null(),
           ])
           .optional(),
+        serviceFeePerRider: zod
+          .number()
+          .nullish()
+          .describe(
+            "Per-rider platform service fee snapshot, computed at trip-post time.\nOnly populated when serviceFeeEnabled is true. NEVER summed with the\nfuel share — the two amounts must be displayed as separate line items.\n",
+          ),
+        feeBreakdown: zod
+          .union([
+            zod
+              .object({
+                fuelShareRwf: zod
+                  .number()
+                  .describe(
+                    "Per-rider fuel share (paid directly to driver, off-platform)",
+                  ),
+                serviceFeeRwf: zod
+                  .number()
+                  .describe(
+                    "Per-rider service fee (paid to KigaliWeShare, on-platform)",
+                  ),
+                totalRiderPaysRwf: zod
+                  .number()
+                  .describe(
+                    "Sum shown for transparency only — NOT collected as a single charge",
+                  ),
+                feePercentage: zod.number(),
+                disclaimerText: zod.string(),
+              })
+              .describe(
+                "Cost breakdown shown to riders. The fuel share and service fee MUST be\ndisplayed as separate visual blocks — never summed into a single price.\nThis is the regulatory boundary between cost-sharing (off-platform) and\nplatform service (on-platform).\n",
+              ),
+            zod.null(),
+          ])
+          .optional(),
       }),
       zod.null(),
     ])
@@ -1365,6 +2136,46 @@ export const GetDashboardSummaryResponse = zod.object({
           "completed",
         ]),
         createdAt: zod.coerce.date(),
+        serviceFeeAmount: zod
+          .number()
+          .nullish()
+          .describe(
+            "Service fee owed by this rider (omitted when serviceFeeEnabled is false)",
+          ),
+        serviceFeeStatus: zod
+          .union([
+            zod.enum(["unpaid", "paid", "waived", "refunded"]),
+            zod.null(),
+          ])
+          .optional(),
+        feeBreakdown: zod
+          .union([
+            zod
+              .object({
+                fuelShareRwf: zod
+                  .number()
+                  .describe(
+                    "Per-rider fuel share (paid directly to driver, off-platform)",
+                  ),
+                serviceFeeRwf: zod
+                  .number()
+                  .describe(
+                    "Per-rider service fee (paid to KigaliWeShare, on-platform)",
+                  ),
+                totalRiderPaysRwf: zod
+                  .number()
+                  .describe(
+                    "Sum shown for transparency only — NOT collected as a single charge",
+                  ),
+                feePercentage: zod.number(),
+                disclaimerText: zod.string(),
+              })
+              .describe(
+                "Cost breakdown shown to riders. The fuel share and service fee MUST be\ndisplayed as separate visual blocks — never summed into a single price.\nThis is the regulatory boundary between cost-sharing (off-platform) and\nplatform service (on-platform).\n",
+              ),
+            zod.null(),
+          ])
+          .optional(),
         trip: zod
           .union([
             zod.object({
@@ -1423,6 +2234,40 @@ export const GetDashboardSummaryResponse = zod.object({
                     })
                     .describe(
                       "Suggested fuel cost-share for the trip. KigaliWeShare does not process payments;\nriders pay drivers directly (MoMo \/ cash). Per-rider amount can never exceed an\nequal split, ensuring this stays a non-commercial cost-share.\n",
+                    ),
+                  zod.null(),
+                ])
+                .optional(),
+              serviceFeePerRider: zod
+                .number()
+                .nullish()
+                .describe(
+                  "Per-rider platform service fee snapshot, computed at trip-post time.\nOnly populated when serviceFeeEnabled is true. NEVER summed with the\nfuel share — the two amounts must be displayed as separate line items.\n",
+                ),
+              feeBreakdown: zod
+                .union([
+                  zod
+                    .object({
+                      fuelShareRwf: zod
+                        .number()
+                        .describe(
+                          "Per-rider fuel share (paid directly to driver, off-platform)",
+                        ),
+                      serviceFeeRwf: zod
+                        .number()
+                        .describe(
+                          "Per-rider service fee (paid to KigaliWeShare, on-platform)",
+                        ),
+                      totalRiderPaysRwf: zod
+                        .number()
+                        .describe(
+                          "Sum shown for transparency only — NOT collected as a single charge",
+                        ),
+                      feePercentage: zod.number(),
+                      disclaimerText: zod.string(),
+                    })
+                    .describe(
+                      "Cost breakdown shown to riders. The fuel share and service fee MUST be\ndisplayed as separate visual blocks — never summed into a single price.\nThis is the regulatory boundary between cost-sharing (off-platform) and\nplatform service (on-platform).\n",
                     ),
                   zod.null(),
                 ])
@@ -1752,4 +2597,12 @@ export const UpdateConfigResponse = zod.object({
   currencyCode: zod.string().describe("e.g. RWF"),
   rnpEmergencyNumber: zod.string().optional(),
   vapidPublicKey: zod.string().optional(),
+  serviceFeeEnabled: zod
+    .boolean()
+    .describe(
+      "Kill switch for the platform service fee. When false, clients MUST\nhide all fee UI and treat fee fields as absent. Backward-compatible\nwith pre-monetization clients.\n",
+    ),
+  serviceFeePct: zod
+    .number()
+    .describe("Percentage applied to the per-rider fuel share"),
 });

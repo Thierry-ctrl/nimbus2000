@@ -5,6 +5,8 @@
  * KigaliWeShare API — neighbor-to-neighbor carpool matching for Kigali commuters
  * OpenAPI spec version: 0.1.0
  */
+import type { FeeBreakdown } from "./feeBreakdown";
+import type { FeeStatus } from "./feeStatus";
 import type { Gender } from "./gender";
 import type { RideRequestStatus } from "./rideRequestStatus";
 import type { Trip } from "./trip";
@@ -23,5 +25,9 @@ export interface RideRequest {
   notes?: string | null;
   status: RideRequestStatus;
   createdAt: Date;
+  /** Service fee owed by this rider (omitted when serviceFeeEnabled is false) */
+  serviceFeeAmount?: number | null;
+  serviceFeeStatus?: FeeStatus | null;
+  feeBreakdown?: FeeBreakdown | null;
   trip?: Trip | null;
 }
