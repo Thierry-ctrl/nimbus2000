@@ -3,7 +3,7 @@
 # ── Build stage ──────────────────────────────────────────────────────────────
 FROM node:24-alpine AS builder
 
-RUN corepack enable
+RUN npm install -g pnpm
 
 WORKDIR /repo
 
