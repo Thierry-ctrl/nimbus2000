@@ -89,7 +89,6 @@ overrides:
   '@tailwindcss/oxide>@tailwindcss/oxide-linux-arm-gnueabihf': '-'
   '@tailwindcss/oxide>@tailwindcss/oxide-linux-arm64-gnu': '-'
   '@tailwindcss/oxide>@tailwindcss/oxide-linux-arm64-musl': '-'
-  '@tailwindcss/oxide>@tailwindcss/oxide-linux-x64-musl': '-'
   '@tailwindcss/oxide>@tailwindcss/oxide-win32-arm64-msvc': '-'
   '@tailwindcss/oxide>@tailwindcss/oxide-win32-x64-msvc': '-'
   esbuild: 0.27.3
@@ -125,7 +124,6 @@ overrides:
   lightningcss>lightningcss-linux-arm-gnueabihf: '-'
   lightningcss>lightningcss-linux-arm64-gnu: '-'
   lightningcss>lightningcss-linux-arm64-musl: '-'
-  lightningcss>lightningcss-linux-x64-musl: '-'
   lightningcss>lightningcss-win32-arm64-msvc: '-'
   lightningcss>lightningcss-win32-x64-msvc: '-'
   rollup>@rollup/rollup-android-arm-eabi: '-'
@@ -1637,6 +1635,13 @@ packages:
     os: [linux]
     libc: [glibc]
 
+  '@tailwindcss/oxide-linux-x64-musl@4.2.1':
+    resolution: {integrity: sha512-5r1X2FKnCMUPlXTWRYpHdPYUY6a1Ar/t7P24OuiEdEOmms5lyqjDRvVY1yy9Rmioh+AunQ0rWiOTPE8F9A3v5g==}
+    engines: {node: '>= 20'}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
   '@tailwindcss/oxide-wasm32-wasi@4.2.1':
     resolution: {integrity: sha512-MGFB5cVPvshR85MTJkEvqDUnuNoysrsRxd6vnk1Lf2tbiqNlXpHYZqkqOQalydienEWOHHFyyuTSYRsLfxFJ2Q==}
     engines: {node: '>=14.0.0'}
@@ -2539,6 +2544,13 @@ packages:
     cpu: [x64]
     os: [linux]
     libc: [glibc]
+
+  lightningcss-linux-x64-musl@1.31.1:
+    resolution: {integrity: sha512-eowF8PrKHw9LpoZii5tdZwnBcYDxRw2rRCyvAXLi34iyeYfqCQNA9rmUM0ce62NlPhCvof1+9ivRaTY6pSKDaA==}
+    engines: {node: '>= 12.0.0'}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
 
   lightningcss@1.31.1:
     resolution: {integrity: sha512-l51N2r93WmGUye3WuFoN5k10zyvrVs0qfKBhyC5ogUQ6Ew6JUSswh78mbSO+IU3nTWsyOArqPCcShdQSadghBQ==}
@@ -4457,12 +4469,16 @@ snapshots:
   '@tailwindcss/oxide-linux-x64-gnu@4.2.1':
     optional: true
 
+  '@tailwindcss/oxide-linux-x64-musl@4.2.1':
+    optional: true
+
   '@tailwindcss/oxide-wasm32-wasi@4.2.1':
     optional: true
 
   '@tailwindcss/oxide@4.2.1':
     optionalDependencies:
       '@tailwindcss/oxide-linux-x64-gnu': 4.2.1
+      '@tailwindcss/oxide-linux-x64-musl': 4.2.1
       '@tailwindcss/oxide-wasm32-wasi': 4.2.1
 
   '@tailwindcss/typography@0.5.19(tailwindcss@4.2.1)':
@@ -5257,11 +5273,15 @@ snapshots:
   lightningcss-linux-x64-gnu@1.31.1:
     optional: true
 
+  lightningcss-linux-x64-musl@1.31.1:
+    optional: true
+
   lightningcss@1.31.1:
     dependencies:
       detect-libc: 2.1.2
     optionalDependencies:
       lightningcss-linux-x64-gnu: 1.31.1
+      lightningcss-linux-x64-musl: 1.31.1
 
   linkify-it@5.0.0:
     dependencies:
