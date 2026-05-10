@@ -184,6 +184,13 @@ docker compose up -d db
 # Push Drizzle schema
 docker compose --profile migrate run --rm migrate
 
+# Seed reference data (invite codes, neighborhoods, corridors, config)
+# IMPORTANT: do this once after first deploy — without it invite codes
+# don't exist and nobody can sign up.
+docker compose exec -T db psql -U kgs -d kigaliweshare -c "INSERT INTO invite_codes (code, label, max_uses) VALUES ('KGL-DEMO','Demo',50),('KGL-PILOT01','Pilot 01',10),('KGL-PILOT02','Pilot 02',10),('KGL-PILOT03','Pilot 03',10),('KGL-PILOT04','Pilot 04',10) ON CONFLICT (code) DO NOTHING;"
+
+docker compose exec -T db psql -U kgs -d kigaliweshare -c "INSERT INTO config (key, value) VALUES ('fuelPriceRwfPerLitre','2938'),('dieselPriceRwfPerLitre','2205'),('vehicleConsumptionLPer100Km','8'),('currency','RWF'),('serviceFeeEnabled','false'),('serviceFeePct','25'),('serviceFeeMinRwf','50'),('serviceFeeMaxRwf','5000'),('serviceFeeFreeKm','3') ON CONFLICT (key) DO NOTHING;"
+
 # Build and start everything
 docker compose up -d --build
 
@@ -191,6 +198,8 @@ docker compose up -d --build
 curl https://your-subdomain.example.com/api/healthz
 # → {"status":"ok"}
 ```
+
+> **Note:** The `-T` flag on `docker compose exec` is required when running from a non-interactive shell (e.g. SSH session without a TTY). Without it you'll see: `cannot attach stdin to a TTY-enabled container because stdin is not a terminal`.
 
 ---
 
