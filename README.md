@@ -110,20 +110,146 @@ pnpm -w run typecheck
 
 ---
 
-## Required secrets
+## Self-hosted deployment
 
-Stored as Replit Secrets (never commit):
+The stack runs as three Docker containers (Postgres, Express API, nginx PWA) behind a Caddy reverse proxy.
 
-| Key | Purpose |
+### 1. Prerequisites
+
+- Ubuntu server (tested on 22.04 / 24.04)
+- Docker + Docker Compose v2
+- Caddy installed (`apt install caddy`)
+- A domain/subdomain with its DNS A record pointing to the server IP
+- A **Clerk Production** instance (test keys do **not** work on custom domains — see Gotchas)
+
+### 2. Clone and configure
+
+```bash
+git clone https://github.com/Thierry-ctrl/nimbus2000.git
+cd nimbus2000
+cp .env.example .env
+nano .env          # fill in all required values — see Gotchas re: inline comments
+```
+
+### 3. Required env vars
+
+| Key | Notes |
 |---|---|
-| `DATABASE_URL` | Postgres connection (auto-provided) |
-| `CLERK_SECRET_KEY` / `VITE_CLERK_PUBLISHABLE_KEY` | Auth (auto via integration) |
-| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Web Push (generate with `npx web-push generate-vapid-keys`) |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | _(optional)_ email delivery |
+| `POSTGRES_PASSWORD` | Required — any long random string |
+| `CLERK_SECRET_KEY` | `sk_live_…` from Clerk Production dashboard |
+| `CLERK_PUBLISHABLE_KEY` | `pk_live_…` — needed by the **API server** |
+| `VITE_CLERK_PUBLISHABLE_KEY` | Same `pk_live_…` key — baked into the **frontend bundle at build time** |
+| `VAPID_PUBLIC_KEY` | Generate once: `npx web-push generate-vapid-keys` |
+| `VAPID_PRIVATE_KEY` | As above |
+| `MOMO_CALLBACK_URL` | `https://<your-domain>/api/payments/callback` |
+| `WEB_PORT` | Set to `8000` when running behind Caddy (avoids port 80 conflict) |
 
-`VAPID_*` were previously checked into `.replit` shared env — they have been removed and must be re-issued as Replit Secrets.
+### 4. Caddy reverse proxy
+
+Create `/etc/caddy/Caddyfile`:
+
+```
+your-subdomain.example.com {
+    reverse_proxy localhost:8000
+}
+```
+
+```bash
+systemctl start caddy
+systemctl enable caddy
+```
+
+Caddy auto-provisions SSL via Let's Encrypt. No manual cert steps needed.
+
+### 5. Clerk DNS records
+
+In your DNS provider, add these CNAME records (replace `kigaliweshare` with your subdomain name):
+
+| Name | Value |
+|---|---|
+| `clerk.kigaliweshare` | `frontend-api.clerk.services` |
+| `accounts.kigaliweshare` | `accounts.clerk.services` |
+| `clkmail.kigaliweshare` | `mail.<your-clerk-id>.clerk.services` |
+| `clk._domainkey.kigaliweshare` | `dkim1.<your-clerk-id>.clerk.services` |
+| `clk2._domainkey.kigaliweshare` | `dkim2.<your-clerk-id>.clerk.services` |
+
+Exact values are shown in Clerk dashboard → Production → Domains.
+
+### 6. Start the stack
+
+```bash
+# Bring up DB first
+docker compose up -d db
+
+# Push Drizzle schema
+docker compose --profile migrate run --rm migrate
+
+# Build and start everything
+docker compose up -d --build
+
+# Verify
+curl https://your-subdomain.example.com/api/healthz
+# → {"status":"ok"}
+```
 
 ---
+
+## Deployment gotchas
+
+Hard-won lessons from the first production deployment — read before debugging.
+
+### `.env` inline comments break values
+
+`.env` does **not** support inline comments. Everything after `=` is the literal value.
+
+```bash
+# WRONG — Clerk receives "sk_test_abc # required" as the key
+CLERK_SECRET_KEY=sk_test_abc                   # required — sk_test_… or sk_live_…
+
+# CORRECT
+CLERK_SECRET_KEY=sk_test_abc
+```
+
+This caused both the Clerk "publishable key is missing" 500 error and the Clerk "proxy URL is invalid" white-screen crash.
+
+### Both Clerk keys are required on the API server
+
+The API needs **two** Clerk env vars, not one:
+
+```
+CLERK_SECRET_KEY=sk_live_…        # verifies JWT tokens server-side
+CLERK_PUBLISHABLE_KEY=pk_live_…   # used by Clerk SDK to initialise the JWKS endpoint
+```
+
+`VITE_CLERK_PUBLISHABLE_KEY` is a third, separate var — same value but used by Vite at **frontend build time**.
+
+### Clerk test keys don't work on custom domains
+
+`sk_test_` / `pk_test_` keys are locked to `localhost`. On any other hostname you get an infinite 307 redirect loop. Create a **Clerk Production instance** and use `sk_live_` / `pk_live_` keys for any deployed environment.
+
+### Caddy and Docker nginx both want port 80
+
+Set `WEB_PORT=8000` in `.env` so Docker's nginx binds to `8000` instead of `80`. Caddy then owns `80`/`443` and proxies to `localhost:8000`.
+
+### Health endpoint is `/api/healthz` not `/api/health`
+
+```bash
+curl https://your-domain/api/healthz   # ✅ returns {"status":"ok"}
+curl https://your-domain/api/health    # ❌ 404
+```
+
+### `VITE_*` env vars are baked in at build time
+
+Any change to a `VITE_` variable requires a full frontend rebuild:
+
+```bash
+docker compose up -d --build web
+```
+
+Simply restarting the container is not enough — the old value is compiled into the JS bundle.
+
+---
+
 
 ## Legal posture (Rwanda)
 
